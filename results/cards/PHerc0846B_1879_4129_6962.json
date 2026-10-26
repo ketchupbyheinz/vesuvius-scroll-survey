@@ -1,0 +1,17 @@
+{
+ "sheet_good_fraction": 0.941,
+ "face": "reverse",
+ "agree_top3": 0.1601,
+ "agree_top3_other_face": 0.1143,
+ "face_contrast_ratio": 1.053,
+ "chain": 1.009,
+ "chain_other_face": 1.0,
+ "face_asymmetry": 1.401,
+ "face_consistency": 0.062,
+ "consistent_face": "reverse",
+ "tiles": 16,
+ "strong_tiles": 3,
+ "strong_tiles_other_face": 2,
+ "ink_on_dark": 0.181,
+ "ink_ct_z": -0.312
+}

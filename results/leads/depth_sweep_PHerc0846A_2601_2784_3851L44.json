@@ -1,0 +1,80 @@
+{
+ "patch": "PHerc0846A_2601_2784_3851L44",
+ "reading_face": "reverse",
+ "models": [
+  "dnative",
+  "seed42",
+  "seed43"
+ ],
+ "per_model_zscore": "pooled over all depths, reading face",
+ "depth_profile": {
+  "-8": {
+   "reading_frac_z_gt_2": 0.0064,
+   "blind_frac_z_gt_2": 0.0099
+  },
+  "-7": {
+   "reading_frac_z_gt_2": 0.0095,
+   "blind_frac_z_gt_2": 0.0097
+  },
+  "-6": {
+   "reading_frac_z_gt_2": 0.01,
+   "blind_frac_z_gt_2": 0.0092
+  },
+  "-5": {
+   "reading_frac_z_gt_2": 0.0139,
+   "blind_frac_z_gt_2": 0.0091
+  },
+  "-4": {
+   "reading_frac_z_gt_2": 0.0174,
+   "blind_frac_z_gt_2": 0.011
+  },
+  "-3": {
+   "reading_frac_z_gt_2": 0.0221,
+   "blind_frac_z_gt_2": 0.0111
+  },
+  "-2": {
+   "reading_frac_z_gt_2": 0.0263,
+   "blind_frac_z_gt_2": 0.0118
+  },
+  "-1": {
+   "reading_frac_z_gt_2": 0.0273,
+   "blind_frac_z_gt_2": 0.0116
+  },
+  "0": {
+   "reading_frac_z_gt_2": 0.0306,
+   "blind_frac_z_gt_2": 0.0126
+  },
+  "1": {
+   "reading_frac_z_gt_2": 0.0292,
+   "blind_frac_z_gt_2": 0.0135
+  },
+  "2": {
+   "reading_frac_z_gt_2": 0.029,
+   "blind_frac_z_gt_2": 0.0132
+  },
+  "3": {
+   "reading_frac_z_gt_2": 0.0276,
+   "blind_frac_z_gt_2": 0.0099
+  },
+  "4": {
+   "reading_frac_z_gt_2": 0.0261,
+   "blind_frac_z_gt_2": 0.0075
+  },
+  "5": {
+   "reading_frac_z_gt_2": 0.0244,
+   "blind_frac_z_gt_2": 0.006
+  },
+  "6": {
+   "reading_frac_z_gt_2": 0.0216,
+   "blind_frac_z_gt_2": 0.0085
+  },
+  "7": {
+   "reading_frac_z_gt_2": 0.0166,
+   "blind_frac_z_gt_2": 0.0069
+  },
+  "8": {
+   "reading_frac_z_gt_2": 0.0121,
+   "blind_frac_z_gt_2": 0.0065
+  }
+ }
+}

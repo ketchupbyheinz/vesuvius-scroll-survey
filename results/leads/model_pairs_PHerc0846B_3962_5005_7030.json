@@ -1,0 +1,10 @@
+{
+ "patch": "PHerc0846B_3962_5005_7030",
+ "inner_face": "forward",
+ "ratio_inner_over_outer": {
+  "seed42-dnative": 3.553,
+  "seed42-seed43": 0.809,
+  "dnative-seed43": 2.099
+ },
+ "note": "top-3 % IoU of each model pair on sheet-check-good pixels, d=0"
+}

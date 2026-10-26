@@ -1,0 +1,46 @@
+{
+    "area_cm2": 3.427576746038404,
+    "area_vx2": 4591553.703756074,
+    "bbox": [
+        [
+            1866.7144775390625,
+            4108.37744140625,
+            4953.78759765625
+        ],
+        [
+            2778.60009765625,
+            6710.01513671875,
+            7805.76708984375
+        ]
+    ],
+    "elapsed_time_s": 284.001800351,
+    "format": "tifxyz",
+    "max_gen": 55,
+    "scale": [
+        0.05000000074505806,
+        0.05000000074505806
+    ],
+    "seed": [
+        2265.0,
+        5370.0,
+        6374.0
+    ],
+    "source": "vc_grow_seg_from_seed",
+    "target_volume": "20250521115057-surface-20260413222639-surface-m7-L0-th0.2.zarr",
+    "type": "seg",
+    "uuid": "e15e909c-3d55-47d0-9f09-7c8952de6511",
+    "vc_gsfs_mode": "explicit_seed",
+    "vc_gsfs_params": {
+        "cache_root": "/home/claude/vesuvius/survey/PHerc0175A/cache",
+        "cache_size": 2000000000,
+        "generations": 55,
+        "min_area_cm": 0.05,
+        "mode": "seed",
+        "normal_grid_path": "/home/claude/vesuvius/survey/PHerc0175A/ng",
+        "step_size": 20,
+        "thread_limit": 2,
+        "use_cuda": false,
+        "voxelsize": 8.64
+    },
+    "vc_gsfs_version": "dev"
+}

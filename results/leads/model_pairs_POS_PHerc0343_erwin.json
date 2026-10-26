@@ -1,0 +1,13 @@
+{
+ "patch": "POS_PHerc0343_erwin",
+ "inner_face": "reverse",
+ "ratio_inner_over_outer": {
+  "seed42-dnative": 3.225,
+  "seed42-seed43": 3.718,
+  "seed42-hecate": 4.285,
+  "dnative-seed43": 4.174,
+  "dnative-hecate": 3.235,
+  "seed43-hecate": 4.439
+ },
+ "note": "top-3 % IoU of each model pair on sheet-check-good pixels, d=0"
+}

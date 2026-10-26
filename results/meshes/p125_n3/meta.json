@@ -1,0 +1,46 @@
+{
+    "area_cm2": 4.028394223238909,
+    "area_vx2": 4596154.803268733,
+    "bbox": [
+        [
+            3149.581298828125,
+            3636.974609375,
+            11837.150390625
+        ],
+        [
+            5360.04736328125,
+            4262.40869140625,
+            14008.013671875
+        ]
+    ],
+    "elapsed_time_s": 172.0407572,
+    "format": "tifxyz",
+    "max_gen": 55,
+    "scale": [
+        0.05000000074505806,
+        0.05000000074505806
+    ],
+    "seed": [
+        4275.0,
+        3719.0,
+        13071.0
+    ],
+    "source": "vc_grow_seg_from_seed",
+    "target_volume": "20250821151825-surface-20260413222639-surface-m7-L0-th0.2.zarr",
+    "type": "seg",
+    "uuid": "cc52e947-dcab-4fc2-87ee-23e9e5156551",
+    "vc_gsfs_mode": "explicit_seed",
+    "vc_gsfs_params": {
+        "cache_root": "/home/claude/vesuvius/p125/cache",
+        "cache_size": 2000000000,
+        "generations": 55,
+        "min_area_cm": 0.05,
+        "mode": "seed",
+        "normal_grid_path": "/home/claude/vesuvius/p125/ng",
+        "step_size": 20,
+        "thread_limit": 2,
+        "use_cuda": false,
+        "voxelsize": 9.362
+    },
+    "vc_gsfs_version": "dev"
+}

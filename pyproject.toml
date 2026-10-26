@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesuvius-survey"
+version = "0.1.0"
+description = "Laptop-friendly First Letters workflow and a sheet/ink diagnostic survey of the unread Herculaneum scrolls"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = ["numpy", "scipy", "zarr>=3", "fsspec", "aiohttp", "tifffile", "imagecodecs", "pillow", "opencv-python-headless", "safetensors"]
+
+[tool.setuptools]
+packages = ["vesuvius_survey"]
