@@ -1,5 +1,7 @@
 # Scroll Survey: a First Letters workflow on a laptop, plus sheet and ink diagnostics for the 21 First Letters scrolls
 
+> "When I started on the challenge, finding which scrolls were worth reading meant unrolling one piece at a time and judging the ink pictures, and we got fooled by air gaps that looked like ink. So over a weekend I built a tool on my own laptop that scores it automatically." (ketchupbyheinz)
+
 **What this is:** a small, tested toolkit that takes a scroll name and returns a scored *report card* for traced
 papyrus patches, a survey of all 21 First Letters scrolls made with it, and a short list of leads that were followed
 up. **No letters have been read.** The leads are places to look.
