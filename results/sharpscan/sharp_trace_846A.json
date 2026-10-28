@@ -1,0 +1,30 @@
+{
+ "what": "PHerc. 846A sheet traced again directly in the 2.4 um scan (vc_grow_seg_from_seed on the m7-L2 surface prediction, seed mapped from (2601, 2784, 3851), 80 generations, 9.85 cm2), rendered on level 2 (9.6 um), 28 layers, seed42 + dense_native",
+ "mesh": "results/meshes/PHerc0846A_HR24_2534_2715_1928 (coordinates: level 2 of the 2.4 um scan)",
+ "card": {
+  "sheet_good_fraction": 0.518,
+  "face_asymmetry": 1.631,
+  "face_consistency": 0.29,
+  "consistent_face": "reverse",
+  "ink_on_dark": 0.108,
+  "tiles": 31,
+  "strong_tiles": 12,
+  "strong_tiles_other_face": 3
+ },
+ "for_comparison_9um": {
+  "PHerc0846A_2601_2784_3851": {
+   "face_asymmetry": 5.548,
+   "face_consistency": 0.643,
+   "ink_on_dark": 0.244
+  },
+  "PHerc0846A_2765_2952_4205": {
+   "face_asymmetry": 3.62,
+   "face_consistency": 0.5,
+   "ink_on_dark": 0.159
+  }
+ },
+ "survey_medians_for_comparison": {
+  "face_asymmetry": 1.36,
+  "face_consistency": 0.14
+ }
+}

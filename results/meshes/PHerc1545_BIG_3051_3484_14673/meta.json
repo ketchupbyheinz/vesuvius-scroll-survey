@@ -1,0 +1,46 @@
+{
+    "area_cm2": 12.10551469624784,
+    "area_vx2": 13811662.025586225,
+    "bbox": [
+        [
+            1662.33349609375,
+            2617.232177734375,
+            12294.7373046875
+        ],
+        [
+            5379.75390625,
+            4189.43798828125,
+            16856.994140625
+        ]
+    ],
+    "elapsed_time_s": 722.872975115,
+    "format": "tifxyz",
+    "max_gen": 90,
+    "scale": [
+        0.05000000074505806,
+        0.05000000074505806
+    ],
+    "seed": [
+        3051.0,
+        3484.0,
+        14673.0
+    ],
+    "source": "vc_grow_seg_from_seed",
+    "target_volume": "20250821151648-surface-20260413222639-surface-m7-L0-th0.2.zarr",
+    "type": "seg",
+    "uuid": "cb4291bf-5224-4ca6-867b-0b4c1cc7d42e",
+    "vc_gsfs_mode": "explicit_seed",
+    "vc_gsfs_params": {
+        "cache_root": "/home/claude/vesuvius/hr/big1545/cache",
+        "cache_size": 3000000000,
+        "generations": 90,
+        "min_area_cm": 0.05,
+        "mode": "seed",
+        "normal_grid_path": "/home/claude/vesuvius/hr/big1545/ng",
+        "step_size": 20,
+        "thread_limit": 2,
+        "use_cuda": false,
+        "voxelsize": 9.362
+    },
+    "vc_gsfs_version": "dev"
+}

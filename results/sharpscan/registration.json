@@ -1,0 +1,74 @@
+{
+ "PHerc0846A": {
+  "vol9": "https://vesuvius-challenge-open-data.s3.us-east-1.amazonaws.com/PHerc0846A/volumes/20250728152254-9.362um-1.2m-113keV-masked.zarr",
+  "vol2": "https://vesuvius-challenge-open-data.s3.us-east-1.amazonaws.com/PHerc0846A/volumes/20260319102732-2.403um-0.2m-77keV-masked.zarr",
+  "k": 3.8959633791094466,
+  "offset_used": [
+   2.6,
+   8.6,
+   -7291.3
+  ],
+  "how": "coarse: whole-section match at ~75 um (9.4 um level 3 vs 2.4 um level 5; score 0.997, rotation 0); local at ~19 um around seed (2601, 2784, 3851): score 0.87, single peak in z. The mapped seed lies 1 voxel from the 2.4 um surface prediction.",
+  "packaged_rerun_local": {
+   "score": 0.899,
+   "best_other_z_score": 0.44,
+   "sharp_xyz": [
+    10141.2,
+    10857.0,
+    7709.4
+   ],
+   "k": 3.8959633791094466,
+   "offset": [
+    7.8,
+    10.7,
+    -7293.9
+   ]
+  }
+ },
+ "PHerc1203": {
+  "vol9": "https://vesuvius-challenge-open-data.s3.us-east-1.amazonaws.com/PHerc1203/volumes/20250820131727-9.362um-1.2m-113keV-masked.zarr",
+  "vol2": "https://vesuvius-challenge-open-data.s3.us-east-1.amazonaws.com/PHerc1203/volumes/20260319130212-2.403um-0.2m-77keV-masked.zarr",
+  "k": 3.8959633791094466,
+  "offset_used": {
+   "PHerc1203_3405_4529_9488": [
+    76.08,
+    -82.82,
+    -30928.9
+   ],
+   "PHerc1203_1894_3594_9489": [
+    74.88,
+    -80.1,
+    -30932.8
+   ]
+  },
+  "local_scores": {
+   "PHerc1203_3405_4529_9488": 0.953,
+   "PHerc1203_1894_3594_9489": 0.936
+  },
+  "packaged_rerun": {
+   "coarse": {
+    "score": 0.987,
+    "z9": 9896,
+    "sharp_z": 7696,
+    "rotation_deg": 0
+   },
+   "local": {
+    "score": 0.953,
+    "best_other_z_score": 0.782,
+    "sharp_xyz": [
+     13347.3,
+     17567.4,
+     6033.6
+    ],
+    "k": 3.8959633791094466,
+    "offset": [
+     81.5,
+     -77.4,
+     -30931.3
+    ]
+   }
+  },
+  "how": "coarse (packaged code): whole-section match at ~150 um (9.4 um level 4 vs resized 2.4 um level 5; score 0.987, rotation 0); local at ~19 um around each patch seed."
+ },
+ "note": "offset in 2.4 um level-0 voxels: p_sharp = p_9um * k + offset (x, y, z). offset_used is what the renders used; it came from an earlier version of the local search that did not use voxel centres consistently. The packaged re-runs (voxel centres) differ by about 5 voxels (13 um); see gapcheck.json \"sensitivity\". Only PHerc. 846A and 1203 of the 21 First Letters scrolls have a 2.4 um scan."
+}

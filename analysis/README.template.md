@@ -6,6 +6,11 @@
 papyrus patches, a survey of all 21 First Letters scrolls made with it, and a short list of leads that were followed
 up. **No letters have been read.** The leads are places to look.
 
+**New (28 Oct): a sharp-scan check.** Where a scroll also has a 4x sharper 2.4 µm scan, the toolkit lines the two
+scans up, carries a trace across and tests whether the ink models' "ink" sits on air gaps. It showed that this
+survey's own top lead, PHerc. 846A (2765, 2952, 4205) and its strongest follow-up, is strongly tied to air gaps
+between layers. See [3h](#3h-sharp-scan-check-sharpscanpy).
+
 The report card addresses two items on the 2026 open-problems list: trace QA, and telling *no ink* apart from
 *no ink recovered yet*.
 
@@ -14,6 +19,8 @@ The report card addresses two items on the 2026 open-problems list: trace QA, an
    measures how one-sided the models' agreement is: *face asymmetry* (whole patch), *face consistency* (tile by
    tile), *which side* (inner or outer face of the roll) and a *crack check* (is the agreed ink sitting on dark
    voids in the CT?).
+3. **Is the "ink" on papyrus or on air gaps?** Where a sharper scan exists, the *sharp-scan check* looks at the same
+   spot at 2.4 µm.
 
 Together these separate "the trace failed", "the models see nothing" and "the models see one-sided, letter-sized
 ink on the side where text is written".
@@ -116,6 +123,9 @@ Voids, cracks and gaps between layers are dark in the CT and can trigger ink mod
 the agreed-ink pixels that fall on the darkest 10 % of the green CT (chance = 0.10). Known text: 0.09 and 0.11.
 Survey patches: median __S_DARK_MED__.
 
+In the sharp-scan check (3h) the three patches with a gap signal have 0.16 to 0.24 and the one without 0.13 (survey
+median 0.14): consistent with this score, but too few to set a threshold.
+
 ### 3e. Neighbour-winding test (`vesuvius_survey.neighbours`)
 
 For a lead, seeds are placed 15, 30 and 45 voxels along the normal on both sides of its most face-consistent tile,
@@ -149,6 +159,59 @@ Every lead that was followed up, with all the patches traced around it. Patches 
 *unclear*. No pass/fail rule is applied; the numbers are the evidence.
 
 __LEADS_SECTION__
+
+The sharp-scan check (3h) later showed the signal of the PHerc. 846A (2765, 2952, 4205) lead and its strongest
+follow-up to be strongly tied to air gaps between layers. The second PHerc. 846A lead (1866, 4064, 7009) was not
+checked. The PHerc. 1545 (3051, 3484, 14673) follow-up is also in 3h.
+
+### 3h. Sharp-scan check (`sharpscan.py`)
+
+Of the 21 First Letters scrolls, PHerc. 846A and PHerc. 1203 also have a 2.4 µm scan (77 keV, 0.2 m), four times
+sharper than the 9.4 µm scan used for the survey. At 2.4 µm the papyrus fibres and the air gaps between layers are
+directly visible, so the same place can be checked: does the card's agreed ink fall on papyrus or on gaps?
+
+**Lining the scans up.** In both scrolls the two scans are aligned in x and y to within 0.2 mm in physical units, with
+no rotation; only the height offset is unknown. A whole-section match finds it (846A at ~75 µm: score 0.997; 1203 at
+~150 µm with the packaged code: score 0.987), and a local match at ~19 µm refines it around each patch (scores 0.87
+to 0.95). The 846A seed, carried across, lands 1 voxel from the 2.4 µm surface prediction.
+`results/sharpscan/registration.json`.
+
+**The check.** The patch mesh is carried across (`sharpscan map`) and rendered on the 2.4 µm scan at 4.8 µm pixels,
+32 layers (±77 µm along the mesh normal). In every layer the darkest quarter of pixels counts as gap. For the card's
+agreed ink (seed42 and dense_native both in their top 3 %, on sheet-check pixels) the check divides the gap share
+under the ink by the gap share elsewhere on the patch, separately for the −normal and +normal halves of the stack,
+and repeats this for 48 shifted copies of the ink mask as controls. A ratio of 1 means no link with gaps.
+
+| patch | card: asym / consistency / ink on dark (ink face) | gap ratio, −normal half (shifted copies below it) | gap ratio, +normal half |
+|---|---|---|---|
+| PHerc. 846A (2601, 2784, 3851), the strongest follow-up | 5.55 / 0.64 / 0.24 (reverse) | **2.50** (48 of 48; shifted median 1.03) | 1.14 (35 of 48) |
+| PHerc. 846A (2765, 2952, 4205), the survey patch | 3.62 / 0.50 / 0.16 (reverse) | **1.82** (47 of 48; shifted median 0.95) | 0.97 (24 of 48) |
+| PHerc. 1203 (3405, 4529, 9488), side: outer | 2.08 / 0.33 / 0.17 (reverse) | **1.73** (47 of 48; shifted median 0.94) | 1.32 (41 of 48) |
+| PHerc. 1203 (1894, 3594, 9489) | 1.36 / 0.13 / 0.13 (forward) | 0.95 (27 of 48) | 0.89 (25 of 48) |
+
+![PHerc. 846A in the 2.4 µm scan with the card's agreed ink](docs/img/sharpscan_846A.jpg)
+
+**846A, traced again in the sharp scan.** The same sheet, traced directly in the 2.4 µm scan (seed carried across,
+9.85 cm²) and inked at 9.6 µm with the same two models, scores 1.63 / 0.29 / 0.11: far below the 5.55 / 0.64 of the
+9.4 µm trace, though still above the survey median (1.36 / 0.14). `results/sharpscan/sharp_trace_846A.json`.
+
+**What this shows.** On both PHerc. 846A patches and on the stronger PHerc. 1203 patch, the agreed ink falls on gaps
+1.7 to 2.5 times as often as elsewhere on the patch (shifted copies: about 1.0), on the −normal half, which in all
+three is the half on the card's ink face (`reverse`); the +normal half shows less (0.97 to 1.32). So the 846A signal
+is largely explained by gaps between layers rather than writing. The card's crack score agrees: 0.16 to 0.24 for the
+three patches with a gap signal, 0.13 for the one without (which has no ink signal to begin with). Four patches are
+too few to set a threshold, and no known-text segment exists in a sharp scan yet, so a positive control is missing.
+
+**PHerc. 1545 (3051, 3484, 14673).** Among survey patches with a low crack score, the most writing-like is this one:
+face consistency 0.64 (known text 0.52 and 0.77), ink on dark 0.13, ink on solid papyrus. It was followed up:
+4 of 6 model pairs prefer its inner face (2.1x to 3.8x; seed42 / seed43 0.88x, dense_native / Hecate 0.76x). Of six
+neighbour traces, three passed or nearly passed the sheet check and were inked; at −15 and −30 voxels they score
+flat, at −45 voxels 2.11 / 0.25 / 0.09, and none has a clear side. Grown from the same seed to 12.1 cm², the trace
+stays on one sheet only in a diagonal band (sheet fraction 0.46) and the whole surface scores flat (1.09 / 0.03).
+No letter rows are visible. `results/leads/followup_PHerc1545_3051_3484_14673.json`.
+
+The patches in this section (the 846A sharp-scan trace, the 1545 neighbours and the 12.1 cm² trace) are not in
+`results/survey.json` or the counts above; their cards and meshes are in `results/cards/` and `results/meshes/`.
 
 ### 4. Survey of the 21 First Letters scrolls
 
@@ -197,12 +260,13 @@ Each step also works on its own:
 |---|---|
 | `trace` | looks up a scroll's CT and surface prediction in the bucket and grows a patch with `vc_grow_seg_from_seed`, using the remote normal grids so the trace stays on one sheet |
 | `seeds` | automatic seed points on the predicted surface at a given height and radius |
-| `render_patch` | streaming surface-volume render (matches `vc_render_tifxyz`, see above), resumable |
+| `render_patch` | streaming surface-volume render (matches `vc_render_tifxyz`, see above), resumable; `--level` / `--coord-mult` render on another multiscale level |
 | `ink` | downloads and sha256-checks both models, runs them on both faces |
 | `inkcheck`, `textchain` | sheet check, agreement and letter-chain scores |
 | `report_card` | the card (PNG + JSON): sheet check, face asymmetry, face consistency, crack check, letter-chain |
 | `side` | inner/outer face from the scroll centre, plus the curvature cross-check |
 | `neighbours` | seeds on the windings either side of a lead's best tile |
+| `sharpscan` | lines a 9 µm scan up with a sharper one, carries a mesh across, and checks whether agreed ink sits on gaps (`register`, `map`, `gapcheck`) |
 
 `analysis/` holds the scripts that built the tables (they use the run machine's paths and folder layout; see
 `analysis/README.md`), all seed lists, the sheet grades and the per-patch side, curvature and crack-check values.
@@ -218,6 +282,8 @@ Each step also works on its own:
 * seed43 run on CPU (cloud) and on GPU (laptop) gives maps that correlate at 0.86, not 1.0. The model-pair ratios
   above come from the laptop GPU runs; the PHerc. 211 remark in the leads table comes from a CPU run.
 * Tracing depends on the published surface prediction: no PHerc. 175B trace passed the sheet check (0 of 9).
+* The sharp-scan check needs a second, sharper scan: of the 21 scrolls only PHerc. 846A and 1203 have one. It was run
+  on four patches, and there is no known-text positive control in a sharp scan yet.
 * Two of the seven PHerc. 343 control seeds did not give a usable trace.
 
 ## Credits

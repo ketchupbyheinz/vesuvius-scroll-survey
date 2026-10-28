@@ -1,0 +1,48 @@
+{
+ "lead": "PHerc1545_3051_3484_14673",
+ "lead_card": {
+  "face_asymmetry": 2.481,
+  "face_consistency": 0.636,
+  "ink_on_dark": 0.126,
+  "consistent_side": "inner"
+ },
+ "four_models": "results/leads/model_pairs_PHerc1545_3051_3484_14673.json",
+ "follow_ups": {
+  "PHerc1545_2554_3571_15118": {
+   "what": "-15 voxels",
+   "sheet_good_fraction": 0.444,
+   "face_asymmetry": 1.081,
+   "face_consistency": 0.125,
+   "consistent_face": "forward",
+   "ink_on_dark": 0.179,
+   "trace_sheet_good_fraction": 0.359
+  },
+  "PHerc1545_2561_3584_15116": {
+   "what": "-30 voxels",
+   "sheet_good_fraction": 0.564,
+   "face_asymmetry": 1.142,
+   "face_consistency": 0.0,
+   "consistent_face": "tie",
+   "ink_on_dark": 0.432,
+   "trace_sheet_good_fraction": 0.562
+  },
+  "PHerc1545_2566_3601_15111": {
+   "what": "-45 voxels",
+   "sheet_good_fraction": 0.553,
+   "face_asymmetry": 2.113,
+   "face_consistency": 0.25,
+   "consistent_face": "forward",
+   "ink_on_dark": 0.086,
+   "trace_sheet_good_fraction": 0.469
+  },
+  "PHerc1545_BIG_3051_3484_14673": {
+   "what": "same seed, 12.1 cm2 trace (90 generations)",
+   "sheet_good_fraction": 0.46,
+   "face_asymmetry": 1.087,
+   "face_consistency": 0.03,
+   "consistent_face": "forward",
+   "ink_on_dark": 0.142
+  }
+ },
+ "note": "neighbour seeds at +-15/30/45 voxels along the normal of the lead's best tile. trace_sheet_good_fraction is the quick-look sheet check before inking (pass >= 0.4); sheet_good_fraction is the card's. +15/+30/+45 traces did not pass (0.13, 0.23, 0.22) and were not inked; -15 (0.36) was inked for reference. Side (inner/outer) of the three inked neighbours: unclear. Not included in results/survey.json."
+}

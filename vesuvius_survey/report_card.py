@@ -75,6 +75,23 @@ def ink_on_dark(ct: np.ndarray, agreed: np.ndarray, m: np.ndarray) -> dict:
             'ink_ct_z': round(float(z[agreed].mean()), 3)}
 
 
+def sheet_masks(ct: np.ndarray):
+    """Sheet check of a flattened CT layer: (smoothed crossness, valid, good, m). ``good`` is the green part of the card;
+    ``m`` is the mask the scores use (``good``, or all valid pixels when under 5 % is green)."""
+    import cv2
+    cross, _, valid = crossness_map(ct)
+    cross = cv2.blur(np.where(valid, cross, 0).astype(np.float32), (129, 129)) / np.maximum(cv2.blur(valid.astype(np.float32), (129, 129)), 1e-3)
+    good = (cross >= CROSS_THRESHOLD) & valid
+    return cross, valid, good, (good if good.mean() > 0.05 else valid)
+
+
+def agreed_top3(a: np.ndarray, b: np.ndarray, m: np.ndarray):
+    """The card's agreed ink: both models in their top 3 % of ``m``. Returns (agreed, either, normalised a, normalised b)."""
+    na, nb = _norm(a, m), _norm(b, m)
+    ta, tb = na >= np.quantile(na[m], 0.97), nb >= np.quantile(nb[m], 0.97)
+    return ta & tb & m, ta | tb, na, nb
+
+
 def analyse(d: Path, ct: np.ndarray, um: float) -> dict:
     sides = {}
     for side, suf in (('forward', ''), ('reverse', '_reverse')):
@@ -83,18 +100,13 @@ def analyse(d: Path, ct: np.ndarray, um: float) -> dict:
         h, w = min(a.shape[0], ct.shape[0]), min(a.shape[1], ct.shape[1])
         sides[side] = (a[:h, :w], b[:h, :w])
     ct = ct[:h, :w]
-    cross, _, valid = crossness_map(ct)
-    import cv2
-    cross = cv2.blur(np.where(valid, cross, 0).astype(np.float32), (129, 129)) / np.maximum(cv2.blur(valid.astype(np.float32), (129, 129)), 1e-3)
-    good = (cross >= CROSS_THRESHOLD) & valid
-    m = good if good.mean() > 0.05 else valid
+    cross, valid, good, m = sheet_masks(ct)
     res = {'sheet_good_fraction': round(float(good.sum() / max(valid.sum(), 1)), 3)}
     stats = {}
     tops = {}
     for side, (a, b) in sides.items():
-        na, nb = _norm(a, m), _norm(b, m)
-        ta, tb = na >= np.quantile(na[m], 0.97), nb >= np.quantile(nb[m], 0.97)
-        tops[side] = (ta & tb & m, ta | tb)
+        agreed, either, na, nb = agreed_top3(a, b, m)
+        tops[side] = (agreed, either)
         e = (na + nb) / 2
         stats[side] = {
             'agree_top3': round(_top_iou(na[m], nb[m]), 4),

@@ -8,18 +8,20 @@
   not "nothing in this scroll", and a trace over real text can still score flat.
 * **Most survey patches look like blank papyrus to these models.** Survey medians: face asymmetry __S_ASYM_MED__
   (known text 3.2 and 4.0), face consistency __S_CONS_MED__ (known text 0.52 and 0.77).
-* **One survey patch scores like the known text on both ink scores: PHerc. 846A at (2765, 2952, 4205).** Its signal
-  is on the inner face. Every model pair with seed43 and Hecate prefers that face too, two of them only weakly (1.3x and
-  1.4x, against 3.2x to 4.4x on the known text). 15 of 17 patches traced around it put their signal on the inner
-  face. Its strongest follow-up, 30 voxels outward, has a higher face asymmetry than the known text (5.55;
-  consistency 0.64), all six pairs of four models prefer its inner face (2.6x to 8.9x), and a 17-depth sweep there
-  peaks at the sheet surface. The caveat: on that patch a quarter of the agreed ink sits on the darkest tenth of the
-  CT (known text: a tenth), so cracks and gaps may contribute. **No letters can be read yet.**
-* **Other leads.** PHerc. 846B: 10 of 14 follow-ups inner (3 outer, 1 tie); its side calls are uncertain on flat
-  sheet and its patches lean on dark CT. PHerc. 1545 at (3499, 4074, 9431), the patch made by the Windows end-to-end
-  test, has the most even four-model agreement of any lead (all six pairs 2.3x to 5.1x), but the windings around it
-  are mixed (4 inner, 1 outer, 1 tie; median consistency 0.19). PHerc. 211, the first lead of this project, was
-  dropped: its neighbouring windings flip sides and seed43 does not confirm it.
-* **What to do with this.** The leads table and the meshes in `results/meshes/` are starting points for careful
-  segmentation and First Letters attempts, PHerc. 846A first. The same card, run on any new trace, shows once the two
-  ink models have run (~6 minutes on a laptop GPU) whether a patch is worth a closer look.
+* **The strongest-looking lead was largely air gaps.** One survey patch, PHerc. 846A at (2765, 2952, 4205), scores
+  like the known text on both ink scores, its follow-ups mostly agree (15 of 17 inner face), and its strongest
+  follow-up (2601, 2784, 3851) beats the known text on face asymmetry (5.55), though with a high crack score (0.24).
+  The 2.4 µm scan settles it: on both patches the agreed ink falls on gaps between layers 1.8 to 2.5 times as often
+  as elsewhere, and the same sheet traced again in the sharp scan scores far lower (1.63 / 0.29). This lead is
+  dropped.
+* **Read the crack score next to the ink scores.** On the four sharp-scan patches it was consistent with the check
+  (0.16 to 0.24 with a gap signal, 0.13 without; survey median 0.14). The other earlier leads with high ink scores
+  also have raised crack scores: PHerc. 846B (its patches lean on dark CT) and the PHerc. 1545 Windows-test patch
+  (0.19). PHerc. 211 had already been dropped: its neighbouring windings flip sides and seed43 does not confirm it.
+* **The most writing-like low-crack patch is PHerc. 1545 at (3051, 3484, 14673)** (consistency 0.64, crack score
+  0.13), but it does not hold up beyond its own 4 cm²: 4 of 6 model pairs agree, its neighbours score flat or show
+  no clear side, and grown to 12 cm² it scores flat. **No letters can be read yet.**
+* **What to do with this.** Run the card on any new trace (~6 minutes on a laptop GPU once traced) and read the crack
+  score next to the two ink scores; where a sharper scan exists, run the sharp-scan check before spending time on a
+  patch. The traces here are ~4 cm² auto-grown patches, and grown larger they drift across windings: clean, large
+  single-sheet surfaces are what a First Letters attempt needs next.

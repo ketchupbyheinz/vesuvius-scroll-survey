@@ -1,0 +1,131 @@
+{
+ "what": "gap share under the card's agreed ink / gap share elsewhere on the patch, in a 32-layer (+-77 um) render of the same mesh on the 2.4 um scan (level 1, 4.8 um pixels); gap = darkest quartile of each layer; 48 shifted copies of the ink mask as controls ('shifted_below' = how many of them score lower). Output of `python -m vesuvius_survey.sharpscan gapcheck`.",
+ "render": "render_patch --level 1 --layers 32 --tile 256 on the laptop, mesh mapped with `sharpscan map` using registration.json offset_used",
+ "sensitivity": "shifting the ink mask by +-14 um (the size of the voxel-centre correction in registration.json) changes the ratios by at most 0.06",
+ "patches": [
+  {
+   "patch": "PHerc0846A_2601_2784_3851",
+   "card": {
+    "face_asymmetry": 5.548,
+    "face_consistency": 0.643,
+    "consistent_face": "reverse",
+    "consistent_side": "inner",
+    "ink_on_dark": 0.244
+   },
+   "sharpscan_gapcheck": {
+    "face": "reverse",
+    "agreed_ink_px": 39062,
+    "scale": 1.9478,
+    "halves": {
+     "minus_normal_half": {
+      "ratio": 2.502,
+      "shifted_median": 1.032,
+      "shifted_max": 1.839,
+      "shifted_below": 48,
+      "n_shifted": 48
+     },
+     "plus_normal_half": {
+      "ratio": 1.144,
+      "shifted_median": 0.968,
+      "shifted_max": 1.595,
+      "shifted_below": 35,
+      "n_shifted": 48
+     }
+    }
+   }
+  },
+  {
+   "patch": "PHerc0846A_2765_2952_4205",
+   "card": {
+    "face_asymmetry": 3.62,
+    "face_consistency": 0.5,
+    "consistent_face": "reverse",
+    "consistent_side": "inner",
+    "ink_on_dark": 0.159
+   },
+   "sharpscan_gapcheck": {
+    "face": "reverse",
+    "agreed_ink_px": 32029,
+    "scale": 1.9478,
+    "halves": {
+     "minus_normal_half": {
+      "ratio": 1.821,
+      "shifted_median": 0.946,
+      "shifted_max": 1.848,
+      "shifted_below": 47,
+      "n_shifted": 48
+     },
+     "plus_normal_half": {
+      "ratio": 0.97,
+      "shifted_median": 0.978,
+      "shifted_max": 1.716,
+      "shifted_below": 24,
+      "n_shifted": 48
+     }
+    }
+   }
+  },
+  {
+   "patch": "PHerc1203_3405_4529_9488",
+   "card": {
+    "face_asymmetry": 2.084,
+    "face_consistency": 0.333,
+    "consistent_face": "reverse",
+    "consistent_side": "outer",
+    "ink_on_dark": 0.169
+   },
+   "sharpscan_gapcheck": {
+    "face": "reverse",
+    "agreed_ink_px": 19871,
+    "scale": 1.9478,
+    "halves": {
+     "minus_normal_half": {
+      "ratio": 1.727,
+      "shifted_median": 0.941,
+      "shifted_max": 1.734,
+      "shifted_below": 47,
+      "n_shifted": 48
+     },
+     "plus_normal_half": {
+      "ratio": 1.319,
+      "shifted_median": 0.955,
+      "shifted_max": 2.121,
+      "shifted_below": 41,
+      "n_shifted": 48
+     }
+    }
+   }
+  },
+  {
+   "patch": "PHerc1203_1894_3594_9489",
+   "card": {
+    "face_asymmetry": 1.361,
+    "face_consistency": 0.133,
+    "consistent_face": "forward",
+    "consistent_side": "unclear",
+    "ink_on_dark": 0.134
+   },
+   "sharpscan_gapcheck": {
+    "face": "forward",
+    "agreed_ink_px": 29144,
+    "scale": 1.9478,
+    "halves": {
+     "minus_normal_half": {
+      "ratio": 0.951,
+      "shifted_median": 0.908,
+      "shifted_max": 2.522,
+      "shifted_below": 27,
+      "n_shifted": 48
+     },
+     "plus_normal_half": {
+      "ratio": 0.892,
+      "shifted_median": 0.86,
+      "shifted_max": 2.321,
+      "shifted_below": 25,
+      "n_shifted": 48
+     }
+    }
+   }
+  }
+ ]
+}

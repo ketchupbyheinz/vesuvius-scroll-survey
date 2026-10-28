@@ -19,6 +19,7 @@ import json
 import math
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -122,12 +123,19 @@ def main(argv=None):
     ap.add_argument("--tile", type=int, default=512)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--resume", action="store_true", help="keep tiles finished by an earlier run")
+    ap.add_argument("--level", default="0", help="multiscale level of the CT to sample (default 0)")
+    ap.add_argument("--coord-mult", type=float, default=1.0,
+                    help="multiply mesh coordinates by this (e.g. 4 for a mesh traced on level 2, rendered on level 0); "
+                         "pixels per mesh unit grow by the same factor")
     a = ap.parse_args(argv)
 
     pts, valid, scale = load_mesh(a.mesh)
     nrm = node_normals(pts, valid)
+    if a.coord_mult != 1.0:
+        pts = pts * np.float32(a.coord_mult)
+        scale = scale / a.coord_mult
     root = zarr.open_group(a.ct, mode="r")
-    ct = root["0"]
+    ct = root[str(a.level)]
     print(f"CT shape {ct.shape} chunks {ct.chunks} dtype {ct.dtype}", flush=True)
 
     r0, r1 = a.rows
@@ -142,14 +150,22 @@ def main(argv=None):
             out = zarr.open_array(str(a.out), mode="r+")
             if out.shape != (a.layers, H, W):
                 out = None
+            elif any(k in out.attrs and str(out.attrs[k]) != str(v) for k, v in
+                     (("level", a.level), ("coord_mult", a.coord_mult), ("ct", a.ct), ("slice_step", a.step))):
+                out = None   # finished earlier with other settings: start again rather than mix tiles
         except Exception:
             out = None
     if out is None:
+        import shutil
+        shutil.rmtree(a.out.parent / (a.out.name + ".tiles_done"), ignore_errors=True)
         out = zarr.open_array(str(a.out), mode="w", shape=(a.layers, H, W),
                               chunks=(a.layers, 256, 256), dtype="u1", zarr_format=2)
     done_dir = a.out.parent / (a.out.name + ".tiles_done")
     done_dir.mkdir(exist_ok=True)
     tiles = [(tr, tc) for tr in range(0, H, a.tile) for tc in range(0, W, a.tile)]
+    # A tile that does not cover whole output chunks is written as a read-modify-write of shared chunks; two worker
+    # threads doing that at once lose one of the writes (a blank tile). Writes are therefore serialised.
+    write_lock = threading.Lock()
     t0 = time.time()
 
     def job(t):
@@ -160,7 +176,8 @@ def main(argv=None):
         rr1, cc1 = min(tr + a.tile, H), min(tc + a.tile, W)
         pos, nn, ok = pixel_geometry(pts, valid, nrm, scale, r0 + tr, r0 + rr1, c0 + tc, c0 + cc1)
         img = render_tile(ct, pos, nn, ok, offsets)
-        out[:, tr:rr1, tc:cc1] = img
+        with write_lock:
+            out[:, tr:rr1, tc:cc1] = img
         marker.touch()
         return t
 
@@ -172,7 +189,7 @@ def main(argv=None):
 
     out.attrs.update({
         "source_mesh": str(a.mesh), "ct": a.ct, "rows": [r0, r1], "cols": [c0, c1],
-        "num_slices": a.layers, "slice_step": a.step,
+        "num_slices": a.layers, "slice_step": a.step, "level": str(a.level), "coord_mult": a.coord_mult,
         "renderer": "render_patch.py (vc_render_tifxyz linear-mode equivalent)",
     })
     from PIL import Image

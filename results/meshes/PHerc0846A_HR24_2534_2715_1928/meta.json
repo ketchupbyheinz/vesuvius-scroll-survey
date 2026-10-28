@@ -1,0 +1,46 @@
+{
+    "area_cm2": 9.84959635632769,
+    "area_vx2": 10660826.288168387,
+    "bbox": [
+        [
+            1351.94873046875,
+            2199.96484375,
+            356.6975402832031
+        ],
+        [
+            4522.97900390625,
+            3850.646240234375,
+            3078.641845703125
+        ]
+    ],
+    "elapsed_time_s": 484.588728614,
+    "format": "tifxyz",
+    "max_gen": 80,
+    "scale": [
+        0.05000000074505806,
+        0.05000000074505806
+    ],
+    "seed": [
+        2534.0,
+        2715.0,
+        1928.0
+    ],
+    "source": "vc_grow_seg_from_seed",
+    "target_volume": "20260319102732-surface-20260413222639-surface-m7-L2-th0.2.zarr",
+    "type": "seg",
+    "uuid": "826814fe-ecf6-4282-b5f0-8861065a7590",
+    "vc_gsfs_mode": "explicit_seed",
+    "vc_gsfs_params": {
+        "cache_root": "/home/claude/vesuvius/hr/trace846A/cache",
+        "cache_size": 4000000000,
+        "generations": 80,
+        "min_area_cm": 0.05,
+        "mode": "seed",
+        "normal_grid_path": "/home/claude/vesuvius/hr/trace846A/ng",
+        "step_size": 20,
+        "thread_limit": 4,
+        "use_cuda": false,
+        "voxelsize": 9.612
+    },
+    "vc_gsfs_version": "dev"
+}
