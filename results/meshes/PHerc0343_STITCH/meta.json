@@ -1,0 +1,46 @@
+{
+    "area_cm2": 8.121877125468764,
+    "area_vx2": 10880000.0,
+    "bbox": [
+        [
+            3982.306884765625,
+            3136.20263671875,
+            9526.4091796875
+        ],
+        [
+            5993.22265625,
+            4925.78369140625,
+            12930.82421875
+        ]
+    ],
+    "format": "tifxyz",
+    "scale": [
+        0.05000000074505806,
+        0.05000000074505806
+    ],
+    "type": "seg",
+    "used_approved_segments": [],
+    "uuid": "57c521d7-5c60-49e6-866f-81aea0b94bc5",
+    "vc_grow_seg_from_segments_params": {
+        "_volume_shape": [
+            17998,
+            8595,
+            8595
+        ],
+        "consensus_default_th": 10,
+        "consensus_limit_th": 4,
+        "flip_x": 0,
+        "growth_directions": [
+            "all"
+        ],
+        "inlier_base_threshold": 20,
+        "local_cost_inl_th": 0.2,
+        "same_surface_th": 4,
+        "src_step": 20,
+        "step": 10,
+        "steps": 5000,
+        "straight_min_count": 1,
+        "tgt_dir": "work\\stitch343\\traces",
+        "use_cuda": false
+    }
+}

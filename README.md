@@ -6,6 +6,10 @@
 papyrus patches, a survey of all 21 First Letters scrolls made with it, and a short list of leads that were followed
 up. **No letters have been read.** The leads are places to look.
 
+**New (29 Oct): bigger surfaces on one winding.** A same-winding filter for VC3D's patch-and-stitch pipeline keeps
+expansion patches on the seed's winding; on PHerc. 343 the stitched surface grew from 2.2 to 6.1 cm². See
+[3i](#3i-bigger-surfaces-on-one-winding-patchsetpy).
+
 **New (28 Oct): a sharp-scan check.** Where a scroll also has a 4x sharper 2.4 µm scan, the toolkit lines the two
 scans up, carries a trace across and tests whether the ink models' "ink" sits on air gaps. It showed that this
 survey's own top lead, PHerc. 846A (2765, 2952, 4205) and its strongest follow-up, is strongly tied to air gaps
@@ -232,6 +236,45 @@ No letter rows are visible. `results/leads/followup_PHerc1545_3051_3484_14673.js
 The patches in this section (the 846A sharp-scan trace, the 1545 neighbours and the 12.1 cm² trace) are not in
 `results/survey.json` or the counts above; their cards and meshes are in `results/cards/` and `results/meshes/`.
 
+### 3i. Bigger surfaces on one winding (`patchset.py`)
+
+VC3D builds large surfaces from many small patches: expansion mode (`vc_grow_seg_from_seed`, `"mode": "expansion"`)
+grows new patches from random points of the existing ones, and `vc_grow_seg_from_segments` stitches them by letting
+overlapping patches vote. Tested on PHerc. 343, starting from the trace that overlaps the known-text segment
+(3.48 cm²), this stalls: the stitched surface stays at 2.17 cm².
+
+**Why.** PHerc. 343 is tightly rolled. Measured along the seed patch's normals, the 192 expansion patches sit in
+layers at roughly 0, ±12 and ±32 voxels: neighbouring windings (or the other face of the sheet) about 0.1 mm apart.
+Once a patch is on a neighbouring winding, every patch seeded from it is too. Of 194 patches only 36 (19 %) stayed on
+the seed's winding; of 901 grown on the laptop, 137 (15 %). The stitcher cannot find agreeing patches on any one sheet.
+
+**Same-winding filter.** Starting from the seed, a patch whose overlap with the accepted patches has a median offset
+below 4 voxels along their normals is accepted; one that overlaps them further away is rejected and moved out of the
+folder, so expansion stops seeding from it and the stitcher never sees it; patches that overlap nothing accepted yet
+stay undecided. `patchset steer` alternates rounds of expansion patches with this filter, and a `gate` subcommand
+tags patches that fail the card's sheet check `"defective"` (the stitcher skips them; 6 of 194 here).
+
+| run | patches on the seed's winding | stitched surface (counted mesh nodes) |
+|---|---|---|
+| seed patch alone | 1 | 3.48 cm² |
+| 194 unsteered expansion patches, all stitched | 36 | 2.17 cm² |
+| 10 steered rounds in the cloud, same-winding patches only | 118 | 4.13 cm² (stopped: out of memory) |
+| 45 steered rounds on the laptop | 458 | 6.09 cm² (stitcher plateaued; last snapshot) |
+
+In the laptop run undecided patches were still allowed to seed new ones, and many of those families turned out to be
+a winding away (batches of 257 and 44 rejected when they linked up): only about a quarter of the steered patches
+landed on the seed's winding (cloud run: about half). `patchset steer` now parks undecided patches between rounds,
+so new patches grow only from accepted ones.
+
+**Report card of the 6.1 cm² stitched surface:** face consistency 0.50 (7 vs
+1 of 12 tiles), face asymmetry 1.94, letter-chain
+2.06 (other face 1.67), ink on dark 0.14, sheet check
+0.51. The known-text segment covers 18 % of it; the agreed ink is 2.6x denser there than on
+the rest. No letters are legible: the stitcher stretches the surface in places, and these two models give blobs
+rather than letter shapes even on the known-text segment. `results/stitch343/summary.json`.
+
+![Stitched PHerc. 343 surface with agreed ink and the known-text footprint](docs/img/stitch343.jpg)
+
 ### 4. Survey of the 21 First Letters scrolls
 
 Survey patches only (first-pass seeds at several heights per scroll; lead follow-ups are counted separately).
@@ -333,6 +376,7 @@ Each step also works on its own:
 | `report_card` | the card (PNG + JSON): sheet check, face asymmetry, face consistency, crack check, letter-chain |
 | `side` | inner/outer face from the scroll centre, plus the curvature cross-check |
 | `neighbours` | seeds on the windings either side of a lead's best tile |
+| `patchset` | keep VC3D's patch-and-stitch pipeline on one winding: `same-winding` filter, sheet-check `gate`, steered expansion rounds (`steer`), time-limited `stitch`, local `stub` volume for the stitcher |
 | `sharpscan` | lines a 9 µm scan up with a sharper one, carries a mesh across, and checks whether agreed ink sits on gaps (`register`, `map`, `gapcheck`) |
 
 `analysis/` holds the scripts that built the tables (they use the run machine's paths and folder layout; see
@@ -349,6 +393,8 @@ Each step also works on its own:
 * seed43 run on CPU (cloud) and on GPU (laptop) gives maps that correlate at 0.86, not 1.0. The model-pair ratios
   above come from the laptop GPU runs; the PHerc. 211 remark in the leads table comes from a CPU run.
 * Tracing depends on the published surface prediction: no PHerc. 175B trace passed the sheet check (0 of 9).
+* The same-winding filter was tested on one scroll (PHerc. 343); its 4-voxel threshold assumes windings at least ~10
+  voxels apart. The stitched surface is distorted in places.
 * The sharp-scan check needs a second, sharper scan: of the 21 scrolls only PHerc. 846A and 1203 have one. It was run
   on four patches, and there is no known-text positive control in a sharp scan yet.
 * Two of the seven PHerc. 343 control seeds did not give a usable trace.
