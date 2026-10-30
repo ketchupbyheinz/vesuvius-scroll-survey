@@ -25,16 +25,15 @@ def test_rank_map_is_a_percentile():
     assert abs(r[0, 0] - 0.005) < 1e-6 and abs(r[9, 9] - 0.995) < 1e-6
 
 
-def test_windings_are_numbered_by_offset(tmp_path):
+def test_sheets_are_grouped_by_offset(tmp_path):
     # three overlapping patches: two on the same sheet (r = 1000), one on the next winding out (r = 1012),
     # plus one bridging patch on r = 1000 so the graph is connected
     ds = [_arc(tmp_path, n, r, a0, a0 + 0.4, 0, 600)[0]
           for n, r, a0 in (('a', 1000, 0.0), ('b', 1000, 0.2), ('c', 1012, 0.1), ('d', 1000.5, 0.3))]
-    _, T, grids, o_p, lay, spacing, G, counts = inkvote.plan(ds, 3.0)
+    T, grids, o_p, lay, counts = inkvote.sheet_numbers([inkvote.mesh_nodes(d / 'mesh') for d in ds])
     per = [set(lay[g[g >= 0]].tolist()) for g in grids]
-    assert per[0] == per[1] == per[3] and len(per[0]) == 1
-    (l0,), (l2,) = per[0], per[2]
-    assert l2 == l0 + 1                                  # patch a's normal points outward, so outward = front = +1
+    assert per[0] == per[1] == per[3] == {0}             # the well-covered sheet is sheet 0
+    assert len(per[2]) == 1 and per[2] != per[0]         # the next winding is a sheet of its own
 
 
 def test_patch_orientation_follows_overlaps(tmp_path):
@@ -43,7 +42,7 @@ def test_patch_orientation_follows_overlaps(tmp_path):
     b, _ = _arc(tmp_path, 'b', 1000, 0.2, 0.6, 0, 600)
     for k in 'xyz':
         t = tifffile.imread(b / 'mesh' / f'{k}.tif'); tifffile.imwrite(b / 'mesh' / f'{k}.tif', t[:, ::-1].copy())
-    _, T, grids, o_p, lay, spacing, G, counts = inkvote.plan([a, b], 3.0)
+    T, grids, o_p, lay, counts = inkvote.sheet_numbers([inkvote.mesh_nodes(d / 'mesh') for d in (a, b)])
     assert o_p.tolist() == [1, -1]
     assert set(lay[grids[0][grids[0] >= 0]].tolist()) == set(lay[grids[1][grids[1] >= 0]].tolist()) == {0}
 
@@ -68,12 +67,8 @@ def test_vote_finds_ink_that_repeats_across_patches(tmp_path):
                 if suf == '':
                     a[ink] = 230
                 tifffile.imwrite(d / f'{m}_s6{suf}.tif', a)
-    G_out = tmp_path / 'vote'
-    res = inkvote.vote(G_out, ds, grid=4.0, stride=2, log=lambda *a: None)
-    z = np.load(G_out / 'vote.npz')
-    face = 'front'                                       # ink was put on the forward maps of identically oriented patches
-    cov = z[f'cov_L+0_{face}']; top = z[f'top_L+0_{face}']
-    k = cov >= 3
-    frac = top[k] / cov[k]
-    assert (frac > 0.9).sum() > 50                      # the repeated spot comes out in every covering patch
-    assert np.mean(frac > 0.5) < 0.1                    # and not much else
+    res = inkvote.vote(tmp_path / 'vote', ds, stride=2, log=lambda *a: None)
+    assert res['front']['agreed_cells'] > 50                         # the repeated spot is agreed in 3D
+    assert res['front']['vs_control'] > 5                            # far more than with the maps turned around
+    assert res['back']['agreed_cells'] <= 5
+    assert res['face_drawn'] == 'front' and list((tmp_path / 'vote').glob('consensus_front_*.png'))

@@ -12,13 +12,12 @@ Subcommands:
                   normals below ``--thr`` voxels is accepted, one that overlaps them further away is rejected (it runs
                   parallel, a winding or a face away), the rest stay undecided. With ``--move`` rejected patches are
                   moved out of the folder, so expansion stops seeding from them and the stitcher never sees them.
-``winding``       the same job, done with the ink vote's winding numbers (inkvote.winding_numbers): every patch is cut
-                  into ~1 mm tiles, overlapping tiles are compared along the sheet normal and the windings numbered
-                  from tile to tile, with the seed patch's winding as 0. A patch is accepted when >= ``--accept`` of its
-                  numbered tiles are on winding 0, rejected when it is numbered but mostly elsewhere, undecided when
-                  under half of its tiles are connected. Unlike ``same-winding`` nothing is accepted by a chain of
-                  small steps, so acceptance cannot creep across windings that touch (on PHerc. 1545 the chain filter
-                  let the patch set spread over ~15 windings).
+``winding``       the same job with the ink vote's sheet grouping (inkvote.sheet_numbers): patches are cut into ~1 mm
+                  tiles and smooth pieces; pieces lying on top of each other join one sheet, but two groups that are
+                  clearly apart anywhere they overlap never join. A patch is accepted when >= ``--accept`` of its tiles
+                  are on the seed's sheet, rejected when it is mostly on another shared sheet, undecided otherwise.
+                  Acceptance cannot creep across touching windings the way a chain of small steps does (on PHerc. 1545
+                  the chain filter let the patch set spread over many windings).
 ``gate``          render each patch's mid surface and tag patches that fail the report card's sheet check
                   ``"defective"`` in meta.json (the stitcher skips them).
 ``steer``         rounds of expansion patches (several single-thread VC3D processes at once, each killed if it hangs),
@@ -105,32 +104,36 @@ def same_winding(paths: Path, seed: str, thr: float = 4.0, min_overlap: int = 40
 
 
 def winding_filter(paths: Path, seed: str, accept: float = 0.8) -> dict:
-    """Classify every auto_grown_* patch in ``paths`` by its winding relative to ``seed`` (see ``winding`` above)."""
+    """Classify every auto_grown_* patch in ``paths`` by sheet relative to ``seed`` (see ``winding`` above)."""
     names = sorted(p.name for p in paths.glob('auto_grown_*') if (p / 'meta.json').exists() and (p / 'z.tif').exists())
     nodes = [inkvote.mesh_nodes(paths / n) for n in names]
-    anchor = names.index(seed)
-    T, grids, o_p, lay, spacing, counts = inkvote.winding_numbers(nodes, anchor)
+    T, grids, o_p, sheet, counts = inkvote.sheet_numbers(nodes, names.index(seed))
+    patches_in = {}
+    for k in range(len(names)):
+        for sh in np.unique(sheet[grids[k][grids[k] >= 0]]).tolist():
+            patches_in[sh] = patches_in.get(sh, 0) + 1
     state, frac, main = {}, {}, {}
     for k, n in enumerate(names):
-        t = lay[grids[k][grids[k] >= 0]]
-        num = t[t != -999]
-        f0 = float((num == 0).mean()) if len(num) else 0.0
+        t = sheet[grids[k][grids[k] >= 0]]
+        if len(t) == 0:
+            state[n] = 'undecided'
+            continue
+        # tiles on a sheet that other patches share, or that lies clearly apart from the seed's sheet
+        shared = np.array([patches_in[x] > 1 or x in T['apart_from_0'] for x in t.tolist()])
+        f0 = float((t == 0).mean())
         frac[n] = round(f0, 3)
-        if len(num):
-            v, c = np.unique(num, return_counts=True); main[n] = int(v[np.argmax(c)])
-        if n == seed or (len(num) >= 0.5 * max(len(t), 1) and f0 >= accept):
+        v, c = np.unique(t, return_counts=True)
+        main[n] = int(v[np.argmax(c)])
+        if n == seed or f0 >= accept:
             state[n] = 'accepted'
-        elif len(num) >= 0.5 * max(len(t), 1):
+        elif shared.mean() >= 0.5:
             state[n] = 'rejected'
         else:
             state[n] = 'undecided'
-    per_winding = {}
-    for n, w in main.items():
-        per_winding[w] = per_winding.get(w, 0) + 1
     out = {s: sum(v == s for v in state.values()) for s in ('accepted', 'rejected', 'undecided')}
-    return {'seed': seed, 'method': 'winding', 'accept': accept, 'counts': out, 'state': state,
-            'share_on_seed_winding': frac, 'main_winding': main, 'spacing_vox': round(spacing, 1),
-            'patches_per_winding': dict(sorted(per_winding.items())), 'tiles_per_winding': counts}
+    return {'seed': seed, 'method': 'sheets', 'accept': accept, 'counts': out, 'state': state,
+            'share_on_seed_sheet': frac, 'main_sheet': main, 'tiles_per_sheet': dict(list(counts.items())[:20]),
+            'seed_sheet_area_cm2': round(counts.get(0, 0) * (inkvote.TILE_NODES * 20 * 9.362e-4) ** 2, 2)}
 
 
 def move_rejected(paths: Path, report: dict, off: Path) -> int:
@@ -313,8 +316,8 @@ def main(argv=None) -> int:
             rep['moved'] = move_rejected(a.paths, rep, a.move)
         if a.out:
             a.out.write_text(json.dumps(rep, indent=1))
-        print(json.dumps({'counts': rep['counts'], 'moved': rep.get('moved', 0), 'spacing_vox': rep['spacing_vox'],
-                          'patches_per_winding': rep['patches_per_winding']}))
+        print(json.dumps({'counts': rep['counts'], 'moved': rep.get('moved', 0), 'seed_sheet_area_cm2': rep['seed_sheet_area_cm2'],
+                          'tiles_per_sheet': rep['tiles_per_sheet']}))
     elif a.cmd == 'gate':
         g = gate(a.paths, a.ct_url, a.thr)
         print(json.dumps({'gated': len(g), 'defective': sum(v['defective'] for v in g.values())}))

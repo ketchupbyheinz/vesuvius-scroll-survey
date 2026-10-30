@@ -84,7 +84,7 @@ def test_winding_filter_rejects_the_next_winding_and_the_far_one_stays_undecided
     rep = patchset.winding_filter(tmp_path, seed)
     st = rep['state']
     assert st[seed] == st[on] == 'accepted' and st[nb] == 'rejected' and st[far] == 'undecided'
-    assert rep['main_winding'][nb] in (1, -1)
+    assert rep['main_sheet'][nb] != 0
 
 
 def test_winding_filter_does_not_creep_through_a_patch_that_jumps_sheets(tmp_path):

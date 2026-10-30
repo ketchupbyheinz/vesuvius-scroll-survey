@@ -1,22 +1,23 @@
 """inkvote.py - keep only ink that repeats where independently traced patches overlap.
 
-Many patches on one winding cover the same papyrus. Real ink sits at the same 3D spot in every patch that covers it;
-crack hits and model noise move around from patch to patch. For every patch this module
+Many patches cover the same papyrus. Real ink sits at the same 3D spot in every patch that covers it; crack hits and
+model noise move around from patch to patch. For every patch this module
 
   1. masks cracks: off-sheet pixels (report card sheet check) and the darkest DARK_Q of on-sheet CT, dilated,
   2. turns seed42 and dense_native into within-patch percentile ranks and keeps the lower of the two (both must agree),
-  3. maps every pixel to 3D with the mesh, assigns it to a winding, and lays it onto a flat grid (the best-fit plane of
-     the main winding; PHerc. 1545 is crushed flat, so a plane suits it better than unrolling around a centre),
+  3. maps the pixels to 3D with the mesh and counts, per 6-voxel cell, how many patches cover it and how many of them
+     have top ink there. Patches on different windings (>= ~6 voxels apart) do not share cells, so no winding sorting
+     is needed; on PHerc. 1545 (crushed flat, windings touching) sorting patches into windings did not hold up.
 
-and averages per grid cell over the patches covering it. Windings are numbered from tile to tile: every patch is cut
-into ~1 mm tiles, overlapping tiles are compared along the sheet normal (0 = same sheet, one spacing = next winding).
-The two faces of the sheet are kept apart: patch normals are made to agree by passing the direction from patch to
-overlapping patch, starting at the first patch; 'front' is the side that patch's normal points to.
+The two faces of the sheet are kept apart (patch normals are made to agree through their overlaps). Control: the same
+vote with every ink map turned 180 degrees on its own patch. Output: vote3d.json and, for the patches with the most
+agreed cells (and any --show surfaces), the CT with the other patches' agreement drawn on it.
 
-  python -m vesuvius_survey.inkvote vote OUT_DIR PATCH_DIR [PATCH_DIR ...] [--grid 3] [--stride 2]
-      PATCH_DIR holds mesh/{x,y,z.tif,meta.json}, ct_mid.tif, seed42_s6[_reverse].tif, dnative_s6[_reverse].tif
+  python -m vesuvius_survey.inkvote vote OUT_DIR PATCH_DIR [PATCH_DIR ...] [--stride 2] [--show SURFACE_DIR ...]
+      PATCH_DIR holds mesh/{x,y,z.tif,meta.json}, ct_mid.tif, seed42_s6[_reverse].tif, dnative_s6[_reverse].tif;
+      a quoted pattern (work/survey/V1545_*) is expanded
   python -m vesuvius_survey.inkvote queue STITCH_DIR SURVEY_DIR CT_URL [--tag V] [--cover 3]
-      picks patches so most of the winding is covered >= 3 times and writes survey dirs for the laptop worker
+      picks patches so most of the patch set is covered >= 3 times and writes survey dirs for the laptop worker
 """
 from __future__ import annotations
 
@@ -107,9 +108,7 @@ def patch_scores(d: Path):
 
 
 # ----------------------------------------------------------------------------------------------- vote
-LAYERS = range(-3, 4)   # windings kept: 0 = the winding with most tiles, +-1 its neighbours (+ = front side), ...
 TILE_NODES = 5          # tile = 5 x 5 mesh nodes (100 voxels, ~0.9 mm)
-MAX_CELLS = 12_000_000  # grid cells per (layer, face); the cell size grows when the area needs it
 
 
 def make_tiles(nodes, tile=TILE_NODES):
@@ -157,7 +156,7 @@ def tile_pairs(T, radius=None, lateral=None):
 def intra_pairs(nodes, grids, T, tile=TILE_NODES):
     """neighbouring tiles of the same patch and their offset (b - a) along the tiles' mean normal (raw orientation),
     measured between the node rows/columns on either side of the shared tile border (20 voxels apart): a patch that
-    jumps sheets at a border shows the full sheet spacing there."""
+    jumps sheets at a border shows the full offset there."""
     pa, pb, off = [], [], []
     for k, (pts, valid, scale, nn, ok) in enumerate(nodes):
         g = grids[k]
@@ -216,102 +215,84 @@ def tile_offsets(T, pairs):
     return ((T['c'][b] - T['c'][a]) * n).sum(1)
 
 
-def sheet_spacing(o, lo=9.0, hi=24.0, default=14.0):
-    """distance between neighbouring windings: peak of |offset| between lo and hi voxels (PHerc. 1545: ~13-15)."""
-    x = np.abs(o); x = x[(x > lo) & (x < hi)]
-    if len(x) < 200:
-        return default
-    h, e = np.histogram(x, bins=int((hi - lo) / 1.5), range=(lo, hi))
-    h = np.convolve(h, [1, 2, 3, 2, 1], 'same')
-    return float((e[np.argmax(h)] + e[np.argmax(h) + 1]) / 2)
+def patch_pieces(n_tiles, ipairs, ioff, smooth=3.0):
+    """Split patches into smooth pieces: neighbouring tiles of one patch whose border offset is under ``smooth`` voxels
+    are joined (union-find). A patch traced on one sheet is one piece; one that jumps sheets splits at the jump."""
+    parent = np.arange(n_tiles)
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+    for (x, y), o in zip(ipairs.tolist(), ioff.tolist()):
+        if abs(o) < smooth:
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[ry] = rx
+    roots = np.array([find(x) for x in range(n_tiles)])
+    _, piece = np.unique(roots, return_inverse=True)
+    return piece
 
 
-def tile_layers(T, pairs, o, spacing, tol=None, iters=4, keep=None):
-    """Number the windings: an edge says 'b is round(o / spacing) windings to the front of a' when o is within tol of
-    a multiple of the spacing (else no edge). Breadth-first labelling from the best-connected tile, then a few rounds of
-    majority vote over each tile's neighbours. Tiles outside the kept connected part get -999: the part holding most of
-    the ``keep`` tiles (indices) when given, else the biggest part."""
-    tol = spacing / 3 if tol is None else tol
-    dl = np.rint(o / spacing).astype(int)
-    ok = np.abs(o - dl * spacing) < tol
-    a, b, dl = pairs[ok, 0], pairs[ok, 1], dl[ok]
-    n = len(T['c'])
-    nbr = [[] for _ in range(n)]
-    for x, y, d in zip(a.tolist(), b.tolist(), dl.tolist()):
-        nbr[x].append((y, d)); nbr[y].append((x, -d))
-    lay = np.full(n, -999, int)
-    from collections import deque
-    comp = np.full(n, -1, int); sizes = []
-    for s in sorted(range(n), key=lambda t: -sum(1 for _, d in nbr[t] if d == 0)):
-        if lay[s] != -999:
+def piece_pair_stats(piece, pairs, off, close=2.5):
+    """Per pair of different pieces with overlapping tiles: (a, b, median offset b - a, tile pairs agreeing with the
+    median within ``close`` voxels)."""
+    A, B = piece[pairs[:, 0]], piece[pairs[:, 1]]
+    sw = A > B
+    A, B = np.where(sw, B, A), np.where(sw, A, B)
+    o = np.where(sw, -off, off)
+    k = A != B
+    A, B, o = A[k], B[k], o[k]
+    if len(A) == 0:
+        return np.zeros(0, int), np.zeros(0, int), np.zeros(0), np.zeros(0, int)
+    key = A.astype(np.int64) * (int(piece.max()) + 1) + B
+    order = np.argsort(key, kind='stable'); key, o, A, B = key[order], o[order], A[order], B[order]
+    starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]]); ends = np.r_[starts[1:], len(key)]
+    med = np.array([np.median(o[s0:e0]) for s0, e0 in zip(starts.tolist(), ends.tolist())])
+    agree = np.array([int((np.abs(o[s0:e0] - m) < close).sum()) for s0, e0, m in zip(starts.tolist(), ends.tolist(), med.tolist())])
+    return A[starts], B[starts], med, agree
+
+
+SAME_SHEET = 2.5    # voxels: overlapping pieces closer than this (median) are the same sheet
+OTHER_SHEET = 7.0   # voxels: ... farther than this are different sheets (in between: no decision)
+
+
+def sheet_groups(n_pieces, A, B, med, agree, min_agree=3):
+    """Group pieces into sheets: join pairs that lie on top of each other (|median| < SAME_SHEET), strongest overlaps
+    first, but never join two groups that are clearly apart (|median| > OTHER_SHEET) anywhere they overlap. Unlike a
+    chain of small steps or integer winding numbers, this cannot creep across touching windings as long as the two
+    windings overlap clearly somewhere. Returns group id per piece."""
+    parent = list(range(n_pieces))
+    apart = [dict() for _ in range(n_pieces)]
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]; x = parent[x]
+        return x
+    for x, y, m, w in zip(A.tolist(), B.tolist(), med.tolist(), agree.tolist()):
+        if abs(m) > OTHER_SHEET and w >= min_agree:
+            apart[x][y] = apart[x].get(y, 0) + w; apart[y][x] = apart[y].get(x, 0) + w
+    order = sorted((i for i in range(len(A)) if abs(med[i]) < SAME_SHEET and agree[i] >= min_agree), key=lambda i: -agree[i])
+    for i in order:
+        rx, ry = find(int(A[i])), find(int(B[i]))
+        if rx == ry:
             continue
-        lay[s] = 0; comp[s] = len(sizes); q = deque([s]); size = 1
-        while q:
-            t = q.popleft()
-            for u, d in sorted(nbr[t], key=lambda e: abs(e[1])):
-                if lay[u] == -999:
-                    lay[u] = lay[t] + d; comp[u] = comp[s]; q.append(u); size += 1
-        sizes.append(size)
-    for _ in range(iters):
-        new = lay.copy()
-        for t in range(n):
-            v = [lay[u] - d for u, d in nbr[t]]
-            if v:
-                vals, cnt = np.unique(v, return_counts=True)
-                if cnt.max() > (np.array(v) == lay[t]).sum():
-                    new[t] = vals[np.argmax(cnt)]
-        lay = new
-    if sizes:
-        kc = comp[keep] if keep is not None and len(keep) else np.zeros(0, int)
-        kc = kc[kc >= 0]
-        best = int(np.bincount(kc).argmax()) if len(kc) else int(np.argmax(sizes))
-        lay[comp != best] = -999
-    return lay
+        if any(find(z) == ry for z in apart[rx]) or any(find(z) == rx for z in apart[ry]):
+            continue                                     # these two sheets are clearly apart somewhere
+        if len(apart[rx]) < len(apart[ry]):
+            rx, ry = ry, rx
+        parent[ry] = rx
+        for z, w in apart[ry].items():
+            apart[rx][z] = apart[rx].get(z, 0) + w
+        apart[ry] = {}
+    return np.array([find(x) for x in range(n_pieces)])
 
 
-class Grid:
-    """Flat grid on a plane (origin p0, in-plane axes e1, e2): cell = ``grid`` voxels. One set of sums per (layer, face)."""
-
-    def __init__(self, p0, e1, e2, umin, umax, vmin, vmax, grid):
-        self.p0, self.e1, self.e2, self.g = p0, e1, e2, grid
-        self.umin, self.vmin = umin, vmin
-        self.nu = int(math.ceil((umax - umin) / grid)) + 1
-        self.nv = int(math.ceil((vmax - vmin) / grid)) + 1
-        self.acc = {}
-
-    def index(self, xyz):
-        d = xyz - self.p0
-        u = np.floor(((d @ self.e1) - self.umin) / self.g).astype(np.int64)
-        v = np.floor(((d @ self.e2) - self.vmin) / self.g).astype(np.int64)
-        ok = (u >= 0) & (u < self.nu) & (v >= 0) & (v < self.nv)
-        return v * self.nu + u, ok
-
-    def _get(self, layer, face):
-        k = (layer, face)
-        if k not in self.acc:
-            n = self.nu * self.nv
-            self.acc[k] = {'cov': np.zeros(n, np.int16), 'sum': np.zeros(n, np.float32), 'top': np.zeros(n, np.float32)}
-        return self.acc[k]
-
-    def add(self, layer, face, idx, val):
-        """one patch: per-cell mean of val -> +1 coverage, + mean, + share of the cell's samples in the top band."""
-        if len(idx) == 0:
-            return
-        A = self._get(layer, face)
-        uq, inv = np.unique(idx, return_inverse=True)
-        cnt = np.bincount(inv).astype(np.float64)
-        A['cov'][uq] += 1
-        A['sum'][uq] += (np.bincount(inv, weights=val) / cnt).astype(np.float32)
-        A['top'][uq] += (np.bincount(inv, weights=(val >= TOP).astype(np.float64)) / cnt).astype(np.float32)
-
-    def image(self, a):
-        return a.reshape(self.nv, self.nu)
-
-
-def winding_numbers(nodes, anchor=None):
-    """Tiles, patch orientation (+-1), winding number per tile (-999 = not connected) and sheet spacing for a set of
-    patch meshes (``mesh_nodes`` tuples). Winding 0 is the main winding of patch ``anchor`` (index), or the winding with
-    the most tiles when anchor is None. Returns (T, tile grids, o_p, lay, spacing, {winding: tiles})."""
+def sheet_numbers(nodes, anchor=None):
+    """Tiles, patch orientation (+-1), sheet id per tile and the sheets' tile counts for a set of patch meshes
+    (``mesh_nodes`` tuples). Patches are split into smooth pieces, pieces grouped into sheets (``sheet_groups``).
+    Sheet 0 is the sheet holding most of patch ``anchor`` (index), else the biggest; the rest are numbered by size.
+    Returns (T, tile grids, o_p, sheet id per tile, {sheet: tiles})."""
     T, tgrids = make_tiles(nodes)
     pairs, dot = tile_pairs(T)
     ipairs, ioff = intra_pairs(nodes, tgrids, T)
@@ -319,131 +300,150 @@ def winding_numbers(nodes, anchor=None):
     T['n'] = T['n'] * o_p[T['p']][:, None]                       # all tile normals now point to the same side
     pairs = pairs[(T['n'][pairs[:, 0]] * T['n'][pairs[:, 1]]).sum(1) > 0.7]
     off = tile_offsets(T, pairs)
-    spacing = sheet_spacing(off)
-    if len(ipairs):
-        pairs = np.concatenate([pairs, ipairs]); off = np.concatenate([off, ioff * o_p[T['p'][ipairs[:, 0]]]])
-    lay = tile_layers(T, pairs, off, spacing, keep=np.flatnonzero(T['p'] == anchor) if anchor is not None else None)
-    ref = lay[(T['p'] == anchor) & (lay != -999)] if anchor is not None else np.zeros(0, int)
-    if len(ref) == 0:
-        ref = lay[lay != -999]
-    vals, cnt = np.unique(ref, return_counts=True)
-    zero = int(vals[np.argmax(cnt)]) if len(vals) else 0
-    lay = np.where(lay == -999, -999, lay - zero)
-    vals, cnt = np.unique(lay[lay != -999], return_counts=True)
-    return T, tgrids, o_p, lay, spacing, {int(v): int(c) for v, c in zip(vals, cnt)}
+    ioff = ioff * (o_p[T['p'][ipairs[:, 0]]] if len(ipairs) else 1)
+    piece = patch_pieces(len(T['c']), ipairs, ioff)
+    n_pieces = int(piece.max()) + 1 if len(piece) else 0
+    # overlaps between pieces of different patches, plus steps inside a patch (a jump to another sheet)
+    allp = np.concatenate([pairs, ipairs]) if len(ipairs) else pairs
+    allo = np.concatenate([off, ioff]) if len(ipairs) else off
+    A, B, med, agree = piece_pair_stats(piece, allp, allo)
+    grp = sheet_groups(n_pieces, A, B, med, agree, min_agree=2) if n_pieces else np.zeros(0, int)
+    g_tile = grp[piece] if len(piece) else np.zeros(0, int)
+    ids, cnt = np.unique(g_tile, return_counts=True)
+    order = list(ids[np.argsort(-cnt, kind='stable')])
+    if anchor is not None and (T['p'] == anchor).any():
+        v, c = np.unique(g_tile[T['p'] == anchor], return_counts=True)
+        a0 = v[np.argmax(c)]; order.remove(a0); order.insert(0, a0)
+    rank = {g: i for i, g in enumerate(order)}
+    sheet = np.array([rank[g] for g in g_tile.tolist()], int)
+    T['piece'] = piece
+    # sheets seen clearly apart from sheet 0 somewhere (a winding or more away)
+    sp = np.full(n_pieces, -1, int); sp[piece] = sheet
+    far = (np.abs(med) > OTHER_SHEET) & (agree >= 2)
+    sa, sb = sp[A[far]], sp[B[far]]
+    T['apart_from_0'] = set(sb[sa == 0].tolist()) | set(sa[sb == 0].tolist())
+    v, c = np.unique(sheet, return_counts=True)
+    return T, tgrids, o_p, sheet, {int(a): int(b) for a, b in zip(v, c)}
 
 
-def plan(patches, grid):
-    """tiles, patch orientation, winding numbers and the flat grid for a set of patch dirs."""
-    nodes = [mesh_nodes(Path(p) / 'mesh') for p in patches]
-    T, tgrids, o_p, lay, spacing, counts = winding_numbers(nodes)
-    # plane of the main winding
-    m = lay == 0 if (lay == 0).any() else np.ones(len(lay), bool)
-    p0 = T['c'][m].mean(0)
-    e3 = T['n'][m].mean(0); e3 /= np.linalg.norm(e3)
-    X = T['c'][m] - p0; X = X - (X @ e3)[:, None] * e3
-    e1 = np.linalg.svd(X, full_matrices=False)[2][0]; e1 -= (e1 @ e3) * e3; e1 /= np.linalg.norm(e1)
-    e2 = np.cross(e3, e1)
-    k = lay != -999
-    U = (T['c'][k] - p0) @ e1; V = (T['c'][k] - p0) @ e2
-    pad = TILE_NODES * 20
-    umin, umax, vmin, vmax = U.min() - pad, U.max() + pad, V.min() - pad, V.max() + pad
-    while (umax - umin) * (vmax - vmin) / grid ** 2 > MAX_CELLS:
-        grid += 1
-    G = Grid(p0, e1, e2, umin, umax, vmin, vmax, grid)
-    G.e3 = e3
-    return nodes, T, tgrids, o_p, lay, spacing, G, counts
+CELL = 6.0          # voxels: two patches cover the same spot when their samples fall in the same 3D cell
+N_SHOW = 12         # patches drawn (most cells where the other patches agree)
 
 
-def vote(out: Path, patches, grid=3.0, stride=2, log=print, min_facing=0.3):
+def _keys(xyz, cell=CELL):
+    q = np.floor(np.asarray(xyz, np.float64) / cell).astype(np.int64)
+    return (q[:, 0] << 42) | (q[:, 1] << 21) | q[:, 2]
+
+
+def _samples(d: Path, nodes_k, stride):
+    """per patch: 3D positions of the sampled pixels, which are usable, agreed-rank maps per face, and the CT."""
+    ct, use, ranks = patch_scores(d)
+    pts, valid, scale, nrm, ok = nodes_k
+    rows, cols = np.arange(0, ct.shape[0], stride), np.arange(0, ct.shape[1], stride)
+    xyz, okp = pixel_xyz(pts, valid, scale, rows, cols)
+    u = use[np.ix_(rows, cols)] & okp
+    return ct, rows, cols, xyz, u, ranks
+
+
+def vote(out: Path, patches, stride=2, show=(), log=print, cell=CELL):
+    """3D vote. For every patch and face, per 3D cell: share of the cell's samples where both models are in their top
+    3 %. Per cell over patches: coverage and summed share. A cell is 'agreed' when >= 3 patches cover it and on
+    average >= half of their samples there are top. Control: the same with every patch's ink map turned 180 degrees on
+    its own surface (same maps, same statistics, 3D alignment destroyed); real repeating ink beats the control.
+    ``show``: extra surfaces (e.g. big stitched ones) that are coloured with the vote but do not vote."""
     out.mkdir(parents=True, exist_ok=True)
-    nodes, T, tgrids, o_p, lay, spacing, G, layer_counts = plan(patches, grid)
-    log(f'tiles {len(lay)}, winding spacing {spacing:.1f} vox, grid {G.g} vox ({G.nu} x {G.nv}), layers {layer_counts}')
+    allp = [Path(p) for p in patches] + [Path(p) for p in show]
+    nodes = [mesh_nodes(p / 'mesh') for p in allp]
+    T, tgrids = make_tiles(nodes)
+    pairs, dot = tile_pairs(T)
+    o_p = orient_patches(T, pairs, dot, len(nodes))
+    combos = [(f, n) for f in ('front', 'back') for n in (False, True)]
+    keys, pid = [], []
+    tops = {c: [] for c in combos}
     info = []
-    for k, (p, (pts, valid, scale, nrm, ok)) in enumerate(zip(patches, nodes)):
-        p = Path(p)
+    for k, p in enumerate(allp[:len(patches)]):
         try:
-            ct, use, ranks = patch_scores(p)
+            ct, rows, cols, xyz, u, ranks = _samples(p, nodes[k], stride)
         except Exception as e:  # noqa
             log('skip', p.name, e); continue
-        face_of = {'forward': 'front' if o_p[k] > 0 else 'back', 'reverse': 'back' if o_p[k] > 0 else 'front'}
-        g = tgrids[k]
-        tl = np.where(g >= 0, lay[np.maximum(g, 0)], -999)                     # layer per tile of this patch
-        facing = np.where(g >= 0, T['n'][np.maximum(g, 0)] @ G.e3, 0)          # tiles tilted away from the plane
-        tl = np.where(facing >= min_facing, tl, -999)
-        H, W = ct.shape
-        rows = np.arange(0, H, stride); cols = np.arange(0, W, stride)
-        band = max(1, 400 // stride)
-        counts = {}
-        for r0 in range(0, len(rows), band):
-            rr = rows[r0:r0 + band]
-            xyz, ok_px = pixel_xyz(pts, valid, scale, rr, cols)
-            ti = np.minimum(((rr[:, None] + 0.5) * scale).astype(int) // TILE_NODES, tl.shape[0] - 1)
-            tj = np.minimum(((cols[None, :] + 0.5) * scale).astype(int) // TILE_NODES, tl.shape[1] - 1)
-            lp = tl[ti, tj]
-            u = use[np.ix_(rr, cols)] & ok_px & (lp != -999)
-            if not u.any():
-                continue
-            idx, inside = G.index(xyz[u].astype(np.float64))
-            lpu = lp[u][inside]; idx = idx[inside]
-            vals_ = {f: a[np.ix_(rr, cols)][u][inside].astype(np.float64) for f, a in ranks.items()}
-            for l in np.unique(lpu):
-                s_ = lpu == l
-                counts[int(l)] = counts.get(int(l), 0) + int(s_.sum())
-                if int(l) not in LAYERS:
-                    continue
-                for f, v in vals_.items():
-                    G.add(int(l), face_of[f], idx[s_], v[s_])
-        tot = max(sum(counts.values()), 1)
-        info.append({'patch': p.name, 'orientation': int(o_p[k]), 'use_fraction': round(float(use.mean()), 3),
-                     'layers': {str(l): round(n / tot, 3) for l, n in sorted(counts.items())}})
-        log('voted', p.name, f'use {use.mean():.2f}', 'layers', {l: round(n / tot, 2) for l, n in sorted(counts.items())})
-    np.savez_compressed(out / 'vote.npz', nu=G.nu, nv=G.nv, grid=G.g, p0=G.p0, e1=G.e1, e2=G.e2, umin=G.umin, vmin=G.vmin,
-                        **{f'{q}_L{l:+d}_{f}': A[q] for (l, f), A in G.acc.items() for q in A})
-    summary = summarise(G)
-    summary.update({'winding_spacing_vox': round(spacing, 1), 'tiles_per_layer': layer_counts, 'patches': len(info),
-                    'grid_vox': G.g, 'per_patch': info})
-    (out / 'vote.json').write_text(json.dumps(summary, indent=1))
-    draw(G, out)
-    return summary
-
-
-def summarise(G, min_cov=3):
-    res = {}
-    cm2 = (G.g * 9.362e-4) ** 2
-    for (l, f), A in sorted(G.acc.items()):
-        cov = A['cov']; k = cov >= min_cov
-        res[f'L{l:+d}_{f}'] = {'area_cm2': round(float((cov >= 1).sum() * cm2), 2), f'area_cm2_cov>={min_cov}': round(float(k.sum() * cm2), 2),
-                               'mean_rank': round(float((A['sum'][k] / cov[k]).mean()), 4) if k.any() else None,
-                               'share_top_in_half': round(float((A['top'][k] / cov[k] >= 0.5).mean()), 4) if k.any() else None}
+        if not u.any():
+            continue
+        uk, inv = np.unique(_keys(xyz[u]), return_inverse=True)
+        cnt = np.bincount(inv).astype(np.float64)
+        keys.append(uk); pid.append(np.full(len(uk), k, np.int32))
+        local = {'front': 'forward' if o_p[k] > 0 else 'reverse', 'back': 'reverse' if o_p[k] > 0 else 'forward'}
+        for f, null in combos:
+            a = ranks[local[f]]
+            a = a[::-1, ::-1] if null else a
+            v = a[np.ix_(rows, cols)][u]
+            tops[(f, null)].append((np.bincount(inv, weights=(v >= TOP).astype(np.float64)) / cnt).astype(np.float32))
+        info.append({'patch': p.name, 'orientation': int(o_p[k]), 'use_fraction': round(float(u.mean()), 3), 'cells': int(len(uk))})
+        log('sampled', p.name, f'cells {len(uk)}')
+    K = np.concatenate(keys); P = np.concatenate(pid)
+    uq, inv = np.unique(K, return_inverse=True)
+    cov = np.bincount(inv)
+    res = {'patches': len(info), 'cell_vox': cell, 'cells': int(len(uq)),
+           'cells_cov>=3': int((cov >= 3).sum()), 'area_cm2_cov>=3_approx': round(float((cov >= 3).sum() * (cell * 9.362e-4) ** 2), 2)}
+    best = {}
+    for f, null in combos:
+        t = np.concatenate(tops[(f, null)]).astype(np.float64)
+        ts = np.bincount(inv, weights=t, minlength=len(uq))
+        k3 = cov >= 3
+        agreed = k3 & (ts / np.maximum(cov, 1) >= 0.5)
+        tag = f'{f}_control' if null else f
+        res[tag] = {'agreed_cells': int(agreed.sum()), 'agreed_share': round(float(agreed.sum() / max(k3.sum(), 1)), 5),
+                    'mean_top_share_cov>=3': round(float((ts[k3] / cov[k3]).mean()), 4) if k3.any() else None}
+        if not null:
+            best[f] = (ts, t)
+    for f in ('front', 'back'):
+        a, c = res[f]['agreed_cells'], res[f + '_control']['agreed_cells']
+        res[f]['vs_control'] = round(a / max(c, 1), 2)
+    # draw: per patch, consensus of the OTHER patches at each pixel's cell (best face = more agreed cells)
+    face = max(('front', 'back'), key=lambda f: res[f]['agreed_cells'])
+    ts, t_own = best[face]
+    other_cov = cov[inv] - 1
+    other_top = ts[inv] - t_own
+    agree_e = (other_cov >= 2) & (other_top / np.maximum(other_cov, 1) >= 0.5) & (t_own >= 0.5)
+    per_patch = np.bincount(P[agree_e], minlength=len(allp))
+    res['face_drawn'] = face
+    res['top_patches'] = [{'patch': allp[k].name, 'agreeing_cells': int(per_patch[k])} for k in np.argsort(-per_patch)[:N_SHOW] if per_patch[k] > 0]
+    res['per_patch'] = info
+    (out / 'vote3d.json').write_text(json.dumps(res, indent=1))
+    lookup = (uq, cov, ts)
+    for k in [int(i) for i in np.argsort(-per_patch)[:N_SHOW] if per_patch[i] > 0] + list(range(len(patches), len(allp))):
+        try:
+            draw_consensus(allp[k], nodes[k], o_p[k], face, lookup, out / f'consensus_{face}_{allp[k].name}.png', stride,
+                           exclude_self=k < len(patches))
+        except Exception as e:  # noqa
+            log('draw failed', allp[k].name, e)
+    log(json.dumps({k: v for k, v in res.items() if k not in ('per_patch', 'top_patches')}))
     return res
 
 
-def vote_images(G, layer, face):
-    A = G._get(layer, face)
-    cov = G.image(A['cov']).astype(np.float32)
-    mean = np.where(cov > 0, G.image(A['sum']) / np.maximum(cov, 1), np.nan)
-    top = np.where(cov > 0, G.image(A['top']) / np.maximum(cov, 1), np.nan)
-    return cov, mean, top
-
-
-def draw(G, out: Path, min_cov=3):
-    """per (layer, face): vote_mean (mean agreed rank where >= min_cov patches; 1/3 = chance for two independent ranks),
-    vote_top (share of covering patches with both models in their top 3 %), coverage. Images are cropped to coverage."""
+def draw_consensus(d: Path, nodes_k, o, face, lookup, png: Path, stride, exclude_self=True):
+    """CT (grey) with this patch's own top ink (blue) and the other patches' agreement at each pixel's 3D cell
+    (yellow -> red as the share of covering patches with top ink rises; only where >= 2 others cover)."""
     from PIL import Image
-    for (l, f) in sorted(G.acc):
-        cov, mean, top = vote_images(G, l, f)
-        if (cov >= min_cov).sum() < 1000:
-            continue
-        ys, xs = np.nonzero(cov > 0); sl = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
-        cov, mean, top = cov[sl], mean[sl], top[sl]
-        k = cov >= min_cov
-        for name, a, lo, hi in (('mean', mean, 1 / 3, 0.8), ('top', top, 0.0, 0.5)):
-            g = np.clip((np.nan_to_num(a) - lo) / (hi - lo), 0, 1)
-            img = np.zeros(cov.shape + (3,), np.uint8); img[cov > 0] = (40, 40, 40)
-            img[k] = np.stack([g[k] * 255, g[k] * 220, np.full(k.sum(), 60)], -1).astype(np.uint8)
-            Image.fromarray(img[::-1]).save(out / f'vote_{name}_L{l:+d}_{f}.png')
-        Image.fromarray((np.clip(cov / 8, 0, 1)[::-1] * 255).astype(np.uint8)).save(out / f'coverage_L{l:+d}_{f}.png')
+    uq, cov, ts = lookup
+    ct, rows, cols, xyz, u, ranks = _samples(d, nodes_k, stride)
+    local = 'forward' if (o > 0) == (face == 'front') else 'reverse'
+    own = ranks[local][np.ix_(rows, cols)] >= TOP
+    kk = _keys(xyz.reshape(-1, 3))
+    j = np.clip(np.searchsorted(uq, kk), 0, len(uq) - 1); hit = (uq[j] == kk) & u.reshape(-1)
+    c = np.where(hit, cov[j], 0).astype(np.float64); s = np.where(hit, ts[j], 0.0)
+    if exclude_self:
+        # remove this patch's own contribution: its share in the cell is approximated by the pixel's own flag
+        c = c - hit; s = s - (own.reshape(-1) & hit)
+    share = np.where(c >= 2, s / np.maximum(c, 1), np.nan).reshape(u.shape)
+    g = ct[np.ix_(rows, cols)].astype(np.float32)
+    img = np.stack([g, g, g], -1) * 0.8
+    img[own & u] = img[own & u] * 0.4 + np.array([60, 110, 255]) * 0.6
+    sh = np.nan_to_num(share)
+    m = (sh >= 0.25) & u
+    col = np.stack([np.full(m.sum(), 255.0), 230 * (1 - np.clip((sh[m] - 0.25) / 0.5, 0, 1)), np.zeros(m.sum())], -1)
+    img[m] = img[m] * 0.3 + col * 0.7
+    img[~u] *= 0.35
+    Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(png)
 
 
 # ----------------------------------------------------------------------------------------------- patch selection
@@ -494,7 +494,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd', required=True)
     v = sub.add_parser('vote'); v.add_argument('out', type=Path); v.add_argument('patches', nargs='+', type=Path)
-    v.add_argument('--grid', type=float, default=3.0); v.add_argument('--stride', type=int, default=2)
+    v.add_argument('--stride', type=int, default=2); v.add_argument('--show', nargs='*', type=Path, default=[])
     q = sub.add_parser('queue'); q.add_argument('stitch', type=Path); q.add_argument('survey', type=Path); q.add_argument('ct')
     q.add_argument('--tag', default='V'); q.add_argument('--cover', type=int, default=3); q.add_argument('--limit', type=int)
     a = ap.parse_args(argv)
@@ -504,7 +504,8 @@ def main(argv=None):
         for p in a.patches:                       # a quoted pattern (work/survey/V1545_*) is expanded here
             pats += sorted(Path(x) for x in glob.glob(str(p))) if any(ch in str(p) for ch in '*?[') else [p]
         pats = [p for p in pats if (p / 'finished.txt').exists() or (p / 'seed42_s6_reverse.tif').exists() and (p / 'ct_mid.tif').exists()]
-        print(json.dumps(vote(a.out, pats, a.grid, a.stride), indent=1)[:2000])
+        res = vote(a.out, pats, a.stride, show=a.show)
+        print(json.dumps({k: v for k, v in res.items() if k != 'per_patch'}, indent=1))
     else:
         queue_surveys(a.stitch, a.survey, a.ct, a.tag, a.cover, a.limit)
 
