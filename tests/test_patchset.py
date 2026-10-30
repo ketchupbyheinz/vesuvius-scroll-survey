@@ -74,3 +74,29 @@ def test_steer_keeps_only_seed_winding_patches_and_parks_undecided(tmp_path):
     kept = sorted(p.name for p in (st / 'paths').iterdir())
     assert 'auto_grown_10' in kept and 'auto_grown_11' not in kept and lonely in kept
     assert (st / 'off' / 'auto_grown_11').exists() and not any((st / 'parked').iterdir())
+
+
+def test_winding_filter_rejects_the_next_winding_and_the_far_one_stays_undecided(tmp_path):
+    seed = _plane(tmp_path, 'seed', 0, 0, 100)
+    on = _plane(tmp_path, 'on', 150, 0, 101.5)
+    nb = _plane(tmp_path, 'neighbour', 100, 100, 113)
+    far = _plane(tmp_path, 'far', 5000, 5000, 100)
+    rep = patchset.winding_filter(tmp_path, seed)
+    st = rep['state']
+    assert st[seed] == st[on] == 'accepted' and st[nb] == 'rejected' and st[far] == 'undecided'
+    assert rep['main_winding'][nb] in (1, -1)
+
+
+def test_winding_filter_does_not_creep_through_a_patch_that_jumps_sheets(tmp_path):
+    # where windings touch, a patch can jump from the seed's sheet onto the next one (z 100 -> 113 halfway along).
+    # The chain filter accepts it (it overlaps the seed on the seed's sheet) and then everything seeded from its far
+    # half; numbered tile by tile, its far half and the patch beyond are one winding out.
+    seed = _plane(tmp_path, 'seed', 0, 0, 100)
+    jump = _plane(tmp_path, 'jump', 200, 0, 100)
+    z = tifffile.imread(tmp_path / jump / 'z.tif'); z[:, 10:] = 113; tifffile.imwrite(tmp_path / jump / 'z.tif', z)
+    beyond = _plane(tmp_path, 'beyond', 450, 0, 113)
+    same = patchset.same_winding(tmp_path, seed)
+    assert same['state'][jump] == same['state'][beyond] == 'accepted'      # the creep
+    rep = patchset.winding_filter(tmp_path, seed)
+    assert rep['state'][beyond] == 'rejected' and rep['state'][jump] == 'rejected'
+    assert rep['state'][seed] == 'accepted'

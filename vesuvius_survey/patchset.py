@@ -12,11 +12,18 @@ Subcommands:
                   normals below ``--thr`` voxels is accepted, one that overlaps them further away is rejected (it runs
                   parallel, a winding or a face away), the rest stay undecided. With ``--move`` rejected patches are
                   moved out of the folder, so expansion stops seeding from them and the stitcher never sees them.
+``winding``       the same job, done with the ink vote's winding numbers (inkvote.winding_numbers): every patch is cut
+                  into ~1 mm tiles, overlapping tiles are compared along the sheet normal and the windings numbered
+                  from tile to tile, with the seed patch's winding as 0. A patch is accepted when >= ``--accept`` of its
+                  numbered tiles are on winding 0, rejected when it is numbered but mostly elsewhere, undecided when
+                  under half of its tiles are connected. Unlike ``same-winding`` nothing is accepted by a chain of
+                  small steps, so acceptance cannot creep across windings that touch (on PHerc. 1545 the chain filter
+                  let the patch set spread over ~15 windings).
 ``gate``          render each patch's mid surface and tag patches that fail the report card's sheet check
                   ``"defective"`` in meta.json (the stitcher skips them).
 ``steer``         rounds of expansion patches (several single-thread VC3D processes at once, each killed if it hangs),
-                  each followed by ``same-winding --move``; undecided patches are parked between rounds so that new
-                  patches are only seeded from accepted ones.
+                  each followed by ``winding --move`` (``--method same-winding`` for the older filter); undecided
+                  patches are parked between rounds so that new patches are only seeded from accepted ones.
 ``stitch``        run ``vc_grow_seg_from_segments`` on the folder with a time limit; it keeps its latest snapshot.
 
 The stitcher needs a local volume only for its shape and voxel size: ``stub`` writes one (``0/.zarray`` + meta.json).
@@ -33,7 +40,13 @@ from pathlib import Path
 
 import numpy as np
 
-from .render_patch import load_mesh, node_normals
+try:
+    from .render_patch import load_mesh, node_normals
+    from . import inkvote
+except ImportError:  # plain script (laptop tools folder)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from render_patch import load_mesh, node_normals  # noqa
+    import inkvote  # noqa
 
 
 # ---------------------------------------------------------------------------------------------- same winding
@@ -89,6 +102,35 @@ def same_winding(paths: Path, seed: str, thr: float = 4.0, min_overlap: int = 40
             changed = True
     counts = {s: sum(v == s for v in state.values()) for s in ('accepted', 'rejected', 'undecided')}
     return {'seed': seed, 'thr': thr, 'counts': counts, 'state': state, 'median_abs_offset': offsets}
+
+
+def winding_filter(paths: Path, seed: str, accept: float = 0.8) -> dict:
+    """Classify every auto_grown_* patch in ``paths`` by its winding relative to ``seed`` (see ``winding`` above)."""
+    names = sorted(p.name for p in paths.glob('auto_grown_*') if (p / 'meta.json').exists() and (p / 'z.tif').exists())
+    nodes = [inkvote.mesh_nodes(paths / n) for n in names]
+    anchor = names.index(seed)
+    T, grids, o_p, lay, spacing, counts = inkvote.winding_numbers(nodes, anchor)
+    state, frac, main = {}, {}, {}
+    for k, n in enumerate(names):
+        t = lay[grids[k][grids[k] >= 0]]
+        num = t[t != -999]
+        f0 = float((num == 0).mean()) if len(num) else 0.0
+        frac[n] = round(f0, 3)
+        if len(num):
+            v, c = np.unique(num, return_counts=True); main[n] = int(v[np.argmax(c)])
+        if n == seed or (len(num) >= 0.5 * max(len(t), 1) and f0 >= accept):
+            state[n] = 'accepted'
+        elif len(num) >= 0.5 * max(len(t), 1):
+            state[n] = 'rejected'
+        else:
+            state[n] = 'undecided'
+    per_winding = {}
+    for n, w in main.items():
+        per_winding[w] = per_winding.get(w, 0) + 1
+    out = {s: sum(v == s for v in state.values()) for s in ('accepted', 'rejected', 'undecided')}
+    return {'seed': seed, 'method': 'winding', 'accept': accept, 'counts': out, 'state': state,
+            'share_on_seed_winding': frac, 'main_winding': main, 'spacing_vox': round(spacing, 1),
+            'patches_per_winding': dict(sorted(per_winding.items())), 'tiles_per_winding': counts}
 
 
 def move_rejected(paths: Path, report: dict, off: Path) -> int:
@@ -172,7 +214,7 @@ def expand(vc_seed: str, stitch: Path, pred_url: str, n_parallel: int, total: in
 
 
 def steer(vc_seed: str, stitch: Path, pred_url: str, seed: str, n_parallel: int, per_round: int, hours: float,
-          rng_base: int, thr: float = 4.0) -> None:
+          rng_base: int, thr: float = 4.0, method: str = 'winding') -> None:
     t_end = time.time() + hours * 3600
     rep_path = stitch / 'same_report.json'
     with open(stitch / 'logs' / 'steer.txt', 'a') as log:
@@ -185,7 +227,8 @@ def steer(vc_seed: str, stitch: Path, pred_url: str, seed: str, n_parallel: int,
                 for q in park.iterdir():
                     shutil.move(str(q), str(stitch / 'paths' / q.name))
             prev = json.loads(rep_path.read_text())['state'] if rep_path.exists() else None
-            rep = same_winding(stitch / 'paths', seed, thr, previous=prev)
+            rep = (winding_filter(stitch / 'paths', seed) if method == 'winding'
+                   else same_winding(stitch / 'paths', seed, thr, previous=prev))
             moved = move_rejected(stitch / 'paths', rep, stitch / 'off')
             park.mkdir(exist_ok=True)
             for name, st in rep['state'].items():
@@ -238,6 +281,9 @@ def main(argv=None) -> int:
     s = sub.add_parser('same-winding')
     s.add_argument('paths', type=Path); s.add_argument('seed')
     s.add_argument('--thr', type=float, default=4.0); s.add_argument('--move', type=Path); s.add_argument('--out', type=Path)
+    w = sub.add_parser('winding')
+    w.add_argument('paths', type=Path); w.add_argument('seed')
+    w.add_argument('--accept', type=float, default=0.8); w.add_argument('--move', type=Path); w.add_argument('--out', type=Path)
     g = sub.add_parser('gate')
     g.add_argument('paths', type=Path); g.add_argument('ct_url'); g.add_argument('--thr', type=float, default=0.4)
     st = sub.add_parser('steer')
@@ -245,6 +291,7 @@ def main(argv=None) -> int:
     st.add_argument('--vc-seed', default='vc_grow_seg_from_seed', help='command for vc_grow_seg_from_seed')
     st.add_argument('--parallel', type=int, default=8); st.add_argument('--per-round', type=int, default=16)
     st.add_argument('--hours', type=float, default=4); st.add_argument('--rng-base', type=int, default=100000)
+    st.add_argument('--method', choices=('winding', 'same-winding'), default='winding')
     sc = sub.add_parser('stitch')
     sc.add_argument('stitch', type=Path); sc.add_argument('seed')
     sc.add_argument('--vc-segments', default='vc_grow_seg_from_segments'); sc.add_argument('--minutes', type=float, default=60)
@@ -260,11 +307,19 @@ def main(argv=None) -> int:
         if a.out:
             a.out.write_text(json.dumps(rep, indent=1))
         print(json.dumps({'counts': rep['counts'], 'moved': rep.get('moved', 0)}))
+    elif a.cmd == 'winding':
+        rep = winding_filter(a.paths, a.seed, a.accept)
+        if a.move:
+            rep['moved'] = move_rejected(a.paths, rep, a.move)
+        if a.out:
+            a.out.write_text(json.dumps(rep, indent=1))
+        print(json.dumps({'counts': rep['counts'], 'moved': rep.get('moved', 0), 'spacing_vox': rep['spacing_vox'],
+                          'patches_per_winding': rep['patches_per_winding']}))
     elif a.cmd == 'gate':
         g = gate(a.paths, a.ct_url, a.thr)
         print(json.dumps({'gated': len(g), 'defective': sum(v['defective'] for v in g.values())}))
     elif a.cmd == 'steer':
-        steer(a.vc_seed, a.stitch, a.pred_url, a.seed, a.parallel, a.per_round, a.hours, a.rng_base)
+        steer(a.vc_seed, a.stitch, a.pred_url, a.seed, a.parallel, a.per_round, a.hours, a.rng_base, method=a.method)
     elif a.cmd == 'stitch':
         if not (a.stitch / 'trace.json').exists():
             (a.stitch / 'trace.json').write_text(json.dumps(DEFAULT_TRACE))
