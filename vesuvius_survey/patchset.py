@@ -12,16 +12,18 @@ Subcommands:
                   normals below ``--thr`` voxels is accepted, one that overlaps them further away is rejected (it runs
                   parallel, a winding or a face away), the rest stay undecided. With ``--move`` rejected patches are
                   moved out of the folder, so expansion stops seeding from them and the stitcher never sees them.
-``winding``       the same job with the ink vote's sheet grouping (inkvote.sheet_numbers): patches are cut into ~1 mm
+``winding``       (experimental) the same job with the ink vote's sheet grouping (inkvote.sheet_numbers): patches are cut into ~1 mm
                   tiles and smooth pieces; pieces lying on top of each other join one sheet, but two groups that are
                   clearly apart anywhere they overlap never join. A patch is accepted when >= ``--accept`` of its tiles
                   are on the seed's sheet, rejected when it is mostly on another shared sheet, undecided otherwise.
                   Acceptance cannot creep across touching windings the way a chain of small steps does (on PHerc. 1545
-                  the chain filter let the patch set spread over many windings).
+                  the chain filter let the patch set spread over many windings). On PHerc. 1545 itself the grouping
+                  does not hold up yet: of overlapping piece pairs that lie on top of each other only 19 % (38 %
+                  weighted) end in one sheet, because the crushed windings touch everywhere.
 ``gate``          render each patch's mid surface and tag patches that fail the report card's sheet check
                   ``"defective"`` in meta.json (the stitcher skips them).
 ``steer``         rounds of expansion patches (several single-thread VC3D processes at once, each killed if it hangs),
-                  each followed by ``winding --move`` (``--method same-winding`` for the older filter); undecided
+                  each followed by ``same-winding --move`` (``--method winding``: the experimental filter); undecided
                   patches are parked between rounds so that new patches are only seeded from accepted ones.
 ``stitch``        run ``vc_grow_seg_from_segments`` on the folder with a time limit; it keeps its latest snapshot.
 
@@ -217,7 +219,7 @@ def expand(vc_seed: str, stitch: Path, pred_url: str, n_parallel: int, total: in
 
 
 def steer(vc_seed: str, stitch: Path, pred_url: str, seed: str, n_parallel: int, per_round: int, hours: float,
-          rng_base: int, thr: float = 4.0, method: str = 'winding') -> None:
+          rng_base: int, thr: float = 4.0, method: str = 'same-winding') -> None:
     t_end = time.time() + hours * 3600
     rep_path = stitch / 'same_report.json'
     with open(stitch / 'logs' / 'steer.txt', 'a') as log:
@@ -294,7 +296,7 @@ def main(argv=None) -> int:
     st.add_argument('--vc-seed', default='vc_grow_seg_from_seed', help='command for vc_grow_seg_from_seed')
     st.add_argument('--parallel', type=int, default=8); st.add_argument('--per-round', type=int, default=16)
     st.add_argument('--hours', type=float, default=4); st.add_argument('--rng-base', type=int, default=100000)
-    st.add_argument('--method', choices=('winding', 'same-winding'), default='winding')
+    st.add_argument('--method', choices=('same-winding', 'winding'), default='same-winding')
     sc = sub.add_parser('stitch')
     sc.add_argument('stitch', type=Path); sc.add_argument('seed')
     sc.add_argument('--vc-segments', default='vc_grow_seg_from_segments'); sc.add_argument('--minutes', type=float, default=60)

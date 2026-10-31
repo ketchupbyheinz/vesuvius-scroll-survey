@@ -6,6 +6,11 @@
 papyrus patches, a survey of all 21 First Letters scrolls made with it, and a short list of leads that were followed
 up. **No letters have been read.** The leads are places to look.
 
+**New (31 Oct): ink that repeats across overlapping patches.** A 3D check keeps only model ink that independently
+traced patches agree on at the same spot, with a control. On 460 PHerc. 1545 patches it finds 21x more agreement
+than the control, but only about 5 mm² of round blobs, many on the edges of holes: no letters. Sorting patches into
+windings did not hold up on this crushed scroll. See [3j](#3j-ink-that-repeats-across-overlapping-patches-inkvotepy).
+
 **New (29 Oct): bigger surfaces on one winding.** A same-winding filter for VC3D's patch-and-stitch pipeline keeps
 expansion patches on the seed's winding; on PHerc. 343 the stitched surface grew from 2.2 to 6.1 cm². See
 [3i](#3i-bigger-surfaces-on-one-winding-patchsetpy).
@@ -256,6 +261,53 @@ rather than letter shapes even on the known-text segment. `results/stitch343/sum
 
 ![Stitched PHerc. 343 surface with agreed ink and the known-text footprint](docs/img/stitch343.jpg)
 
+### 3j. Ink that repeats across overlapping patches (`inkvote.py`)
+
+A traced patch is one guess at where the sheet is, and the ink models give one guess at where the ink is. Where
+several patches were traced independently over the same papyrus, real ink should sit at the same 3D spot in every
+one of them; model noise and crack hits move around. `inkvote vote` checks exactly that:
+
+1. **Cracks out first.** Off-sheet pixels (card sheet check) and the darkest 15 % of on-sheet CT (after a light blur,
+   grown by 5 px) are left out before ranking.
+2. **Both models must agree.** seed42 and dense_native become percentile ranks within the patch; a pixel counts as top
+   ink when both are in their top 3 %.
+3. **Same spot in 3D.** Every pixel is mapped to 3D through its mesh and dropped into a 6-voxel cube. Per cube: how
+   many patches pass through it and in how many of them it is top ink. A cube is *agreed* when at least 3 patches
+   cover it and on average at least half of their samples there are top ink. Patches on different windings do not
+   share cubes, so nothing has to be sorted into windings first.
+4. **Control.** The same vote with every patch's ink map turned 180 degrees on its own surface: same maps, same
+   statistics, 3D alignment destroyed. The two faces of the sheet are kept apart (patch normals are made to agree
+   through their overlaps).
+
+**PHerc. 1545, 460 patches** (picked from 1,060 expansion patches around (3051, 3484, 14673) to cover the area about 3
+times over, which 58 % of it reached; 28-layer renders, seed42 + dense_native on the laptop, ~1.6 min per patch):
+
+| face | agreed cubes | turned-map control | ratio |
+|---|---|---|---|
+| back | 1,780 | 84 | 21x |
+| front | 500 | 70 | 7x |
+
+So some model ink does repeat in 3D, far above the control. But it is very little: about 5 mm² in total over roughly
+34 cm² of covered sheet (cube count, overlapping windings counted separately), as round blobs 0.5 to 1 mm across, and
+on the patches with the most agreed cubes the strongest blobs sit on the edges of dark holes in the papyrus. Letters
+would show as 2 to 3 mm strokes in lines; nothing like that is there. `results/inkvote1545/vote3d.json`.
+
+![PHerc. 1545: ink agreed across overlapping patches](docs/img/inkvote1545.jpg)
+
+**Sorting patches into windings did not work on this scroll.** PHerc. 1545 is crushed flat (a lens about 50 x 28 mm
+in cross-section), and its windings touch. The 1,060 patches that the 4-voxel same-winding filter (3i) accepted turn
+out to spread over many windings: where windings touch, acceptance creeps from one to the next in small steps. Two
+replacements were tried and both fail checks on the full set (`results/inkvote1545/sorting_checks.json`):
+
+* *Integer winding numbers* from tile overlaps (~1 mm tiles; 0 = same sheet, one spacing = next winding): only 46 % of
+  the overlap links (62 % weighted) agree with the final numbers; the gap between windings varies too much.
+* *Same-sheet grouping* (join pieces that lie on top of each other, never join groups seen clearly apart): 2,438
+  groups, and only 19 % of the same-sheet pairs (38 % weighted) end up in one group.
+
+The grouping is in `patchset winding` as an experimental option; `patchset steer` keeps the 3i filter by default.
+The 3D vote above needs neither. The stitched surfaces were affected too: on 1545, two stitched surfaces overlapping
+each other lie on the same sheet over only 21 % to 81 % of the overlap, the rest 8 to 24 voxels apart.
+
 ### 4. Survey of the 21 First Letters scrolls
 
 Survey patches only (first-pass seeds at several heights per scroll; lead follow-ups are counted separately).
@@ -309,7 +361,8 @@ Each step also works on its own:
 | `report_card` | the card (PNG + JSON): sheet check, face asymmetry, face consistency, crack check, letter-chain |
 | `side` | inner/outer face from the scroll centre, plus the curvature cross-check |
 | `neighbours` | seeds on the windings either side of a lead's best tile |
-| `patchset` | keep VC3D's patch-and-stitch pipeline on one winding: `same-winding` filter, sheet-check `gate`, steered expansion rounds (`steer`), time-limited `stitch`, local `stub` volume for the stitcher |
+| `patchset` | keep VC3D's patch-and-stitch pipeline on one winding: `same-winding` filter, experimental `winding` (same-sheet grouping), sheet-check `gate`, steered expansion rounds (`steer`), time-limited `stitch`, local `stub` volume for the stitcher |
+| `inkvote` | ink that repeats across overlapping patches: crack mask, two-model agreement, 6-voxel 3D cubes, turned-map control, pictures (`vote`); picks patches for even coverage and queues them for the laptop worker (`queue`) |
 | `sharpscan` | lines a 9 µm scan up with a sharper one, carries a mesh across, and checks whether agreed ink sits on gaps (`register`, `map`, `gapcheck`) |
 
 `analysis/` holds the scripts that built the tables (they use the run machine's paths and folder layout; see
@@ -331,6 +384,11 @@ Each step also works on its own:
 * The sharp-scan check needs a second, sharper scan: of the 21 scrolls only PHerc. 846A and 1203 have one. It was run
   on four patches, and there is no known-text positive control in a sharp scan yet.
 * Two of the seven PHerc. 343 control seeds did not give a usable trace.
+* The 3D ink vote was run on one area of one scroll (PHerc. 1545, around (3051, 3484, 14673)); it has not yet been
+  run on known text, so how many agreed cubes letters would give is not measured. Its 6-voxel cubes cannot separate
+  windings closer than that, which happens where 1545's windings touch.
+* On PHerc. 1545 the same-winding filter (3i) crept across touching windings; its 1,060 "same-winding" patches are not
+  one winding.
 
 ## Credits
 
